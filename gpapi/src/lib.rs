@@ -48,7 +48,7 @@ impl Gpapi {
     }
 
     /// Play Store package detail request (provides more detail than bulk requests).
-    pub fn details(&self, pkg_name: &str) -> Result<Option<DetailsResponse>, Box<Error>> {
+    pub fn details(&self, pkg_name: &str) -> Result<Option<DetailsResponse>, Box<dyn Error>> {
         let mut req = HashMap::new();
         req.insert("doc", pkg_name);
         let resp = self.execute_request_v2("details", Some(req), None, None)?;
@@ -62,7 +62,7 @@ impl Gpapi {
     pub fn bulk_details(
         &self,
         pkg_names: &[&str],
-    ) -> Result<Option<BulkDetailsResponse>, Box<Error>> {
+    ) -> Result<Option<BulkDetailsResponse>, Box<dyn Error>> {
         let mut req = BulkDetailsRequest::new();
         req.docid = pkg_names.into_iter().cloned().map(String::from).collect();
         req.includeDetails = Some(true);
@@ -81,7 +81,7 @@ impl Gpapi {
         }
     }
 
-    pub fn get_download_url(&self, pkg_name: &str, vc: u64) -> Result<Option<String>, Box<Error>> {
+    pub fn get_download_url(&self, pkg_name: &str, vc: u64) -> Result<Option<String>, Box<dyn Error>> {
         if let Ok(Some(ref app_delivery_resp)) = self.app_delivery_data(pkg_name, vc) {
             match app_delivery_resp {
                 DeliveryResponse {
@@ -167,7 +167,7 @@ impl Gpapi {
         // }
     }
 
-    pub fn authenticate(&mut self) -> Result<(), Box<Error>> {
+    pub fn authenticate(&mut self) -> Result<(), Box<dyn Error>> {
         let form = self.login()?;
         if let Some(token) = form.get("auth") {
             self.token = token.to_string();
@@ -183,7 +183,7 @@ impl Gpapi {
     /// [GSF id](https://blog.onyxbits.de/what-exactly-is-a-gsf-id-where-do-i-get-it-from-and-why-should-i-care-2-12/).
     /// You can also get your **GSF ID**  using this following [device id app](https://play.google.com/store/apps/details?id=com.evozi.deviceid&hl=en)
     /// Note that you don't want the Android ID here, but the GSF id.
-    pub fn login(&self) -> Result<HashMap<String, String>, Box<Error>> {
+    pub fn login(&self) -> Result<HashMap<String, String>, Box<dyn Error>> {
         use consts::defaults::DEFAULT_LOGIN_URL;
 
         let login_req = ::build_login_request(&self.username, &self.password, &self.gsf_id);
@@ -220,7 +220,7 @@ impl Gpapi {
         query: Option<HashMap<&str, &str>>,
         msg: Option<&[u8]>,
         content_type: Option<&str>,
-    ) -> Result<ResponseWrapper, Box<Error>> {
+    ) -> Result<ResponseWrapper, Box<dyn Error>> {
         let mut url = Url::parse(&format!(
             "{}/{}",
             "https://android.clients.google.com/fdfe", endpoint
@@ -380,7 +380,7 @@ pub fn build_openssl_rsa(p: &PubKey) -> openssl::rsa::Rsa<openssl::pkey::Public>
 ///
 /// Extract public key (PEM) from a raw buffer.
 ///
-fn extract_pubkey(buf: &[u8]) -> Result<Option<PubKey>, Box<Error>> {
+fn extract_pubkey(buf: &[u8]) -> Result<Option<PubKey>, Box<dyn Error>> {
     use byteorder::{NetworkEndian, ReadBytesExt};
     use std::io::{Cursor, Read};
     let mut cur = Cursor::new(&buf);
