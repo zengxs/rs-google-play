@@ -8,7 +8,6 @@ extern crate openssl;
 extern crate protobuf;
 extern crate reqwest;
 
-#[macro_use]
 extern crate serde_derive;
 extern crate serde;
 
@@ -31,17 +30,15 @@ pub const STATUS_PURCHASE_ERR: i32 = 5;
 pub struct Gpapi {
     pub username: String,
     pub password: String,
-    pub gsf_id: String,
     pub token: String,
     client: Box<reqwest::Client>,
 }
 
 impl Gpapi {
-    pub fn new<S: Into<String>>(username: S, password: S, gsf_id: S) -> Self {
+    pub fn new<S: Into<String>>(username: S, password: S) -> Self {
         Gpapi {
             username: username.into(),
             password: password.into(),
-            gsf_id: gsf_id.into(),
             token: String::from(""),
             client: Box::new(reqwest::Client::new()),
         }
@@ -179,14 +176,10 @@ impl Gpapi {
 
     /// Handles logging into Google Play Store, retrieving a set of tokens from
     /// the server that can be used for future requests.
-    /// The `gsf_id` is obtained by retrieving your
-    /// [GSF id](https://blog.onyxbits.de/what-exactly-is-a-gsf-id-where-do-i-get-it-from-and-why-should-i-care-2-12/).
-    /// You can also get your **GSF ID**  using this following [device id app](https://play.google.com/store/apps/details?id=com.evozi.deviceid&hl=en)
-    /// Note that you don't want the Android ID here, but the GSF id.
     pub fn login(&self) -> Result<HashMap<String, String>, Box<dyn Error>> {
         use consts::defaults::DEFAULT_LOGIN_URL;
 
-        let login_req = ::build_login_request(&self.username, &self.password, &self.gsf_id);
+        let login_req = ::build_login_request(&self.username, &self.password);
 
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -248,7 +241,6 @@ impl Gpapi {
             HeaderValue::from_static("cl:billing.select_add_instrument_by_default"),
         );
         headers.insert("X-DFE-Unsupported-Experiments", HeaderValue::from_static("nocache:billing.use_charging_poller,market_emails,buyer_currency,prod_baseline,checkin.set_asset_paid_app_field,shekel_test,content_ratings,buyer_currency_in_app,nocache:encrypted_apk,recent_changes"));
-        headers.insert("X-DFE-Device-Id", HeaderValue::from_str(&self.gsf_id)?);
         headers.insert(
             "X-DFE-Client-Id",
             HeaderValue::from_static("am-android-google"),
@@ -400,23 +392,23 @@ fn extract_pubkey(buf: &[u8]) -> Result<Option<PubKey>, Box<dyn Error>> {
 pub struct LoginRequest {
     email: String,
     encrypted_password: String,
-    service: String,
     account_type: String,
+    google_play_services_version: String,
     has_permission: String,
+    add_account: String,
     source: String,
-    gsf_id: String,
-    app: String,
     device_country: String,
     operator_country: String,
     lang: String,
-    sdk_version: String,
+    service: String,
+    caller_pkg: String,
     build_config: Option<BuildConfiguration>,
 }
 
 impl LoginRequest {
     pub fn form_post(&self) -> String {
-        format!("Email={}&EncryptedPasswd={}&service={}&accountType={}&has_permission={}&source={}&androidId={}&app={}&device_country={}&operatorCountry={}&lang={}&sdk_version={}",
-         self.email, self.encrypted_password, self.service, self.account_type, self.has_permission, self.source, self.gsf_id, self.app,self.device_country, self.operator_country, self.lang, self.sdk_version)
+        format!("Email={}&EncryptedPasswd={}&add_account={}&accountType={}&google_play_services_version={}&has_permission={}&source={}&device_country={}&operatorCountry={}&lang={}&service={}&callerPkg={}",
+         self.email, self.encrypted_password, self.add_account, self.account_type, self.google_play_services_version, self.has_permission, self.source, self.device_country, self.operator_country, self.lang, self.service, self.caller_pkg)
     }
 }
 
@@ -478,22 +470,22 @@ impl Default for LoginRequest {
         LoginRequest {
             email: String::from(""),
             encrypted_password: String::from(""),
-            service: String::from(consts::defaults::DEFAULT_SERVICE),
+            add_account: String::from("1"),
             account_type: String::from(consts::defaults::DEFAULT_ACCOUNT_TYPE),
+            google_play_services_version: String::from(consts::defaults::DEFAULT_GOOGLE_PLAY_SERVICES_VERSION),
             has_permission: String::from("1"),
             source: String::from("android"),
-            gsf_id: String::from(""),
-            app: String::from(consts::defaults::DEFAULT_ANDROID_VENDING),
             device_country: String::from(consts::defaults::DEFAULT_DEVICE_COUNTRY),
             operator_country: String::from(consts::defaults::DEFAULT_COUNTRY_CODE),
             lang: String::from(consts::defaults::DEFAULT_LANGUAGE),
-            sdk_version: String::from(consts::defaults::DEFAULT_SDK_VERSION),
+            service: String::from(consts::defaults::DEFAULT_SERVICE),
+            caller_pkg: String::from(consts::defaults::DEFAULT_ANDROID_VENDING),
             build_config: None,
         }
     }
 }
 
-pub fn build_login_request(username: &str, password: &str, gsf_id: &str) -> LoginRequest {
+pub fn build_login_request(username: &str, password: &str) -> LoginRequest {
     let login = encrypt_login(username, password).unwrap();
     let encrypted_password = base64_urlsafe(&login);
     let build_config = BuildConfiguration {
@@ -502,7 +494,6 @@ pub fn build_login_request(username: &str, password: &str, gsf_id: &str) -> Logi
     LoginRequest {
         email: String::from(username),
         encrypted_password,
-        gsf_id: String::from(gsf_id),
         build_config: Some(build_config),
         ..Default::default()
     }
@@ -539,10 +530,9 @@ mod tests {
             match (
                 env::var("GOOGLE_LOGIN"),
                 env::var("GOOGLE_PASSWORD"),
-                env::var("ANDROID_ID"),
             ) {
-                (Ok(username), Ok(password), Ok(gsf_id)) => {
-                    let mut api = Gpapi::new(username, password, gsf_id);
+                (Ok(username), Ok(password)) => {
+                    let mut api = Gpapi::new(username, password);
                     api.authenticate().ok();
                     assert!(api.token != "");
 
@@ -550,7 +540,7 @@ mod tests {
                     let pkg_names = ["com.viber.voip", "air.WatchESPN"];
                     let bulk_details = api.bulk_details(&pkg_names).ok();
                 }
-                _ => panic!("require login/password/gsf_id for test"),
+                _ => panic!("require login/password for test"),
             }
         }
 

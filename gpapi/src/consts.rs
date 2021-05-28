@@ -10,7 +10,6 @@ pub mod defaults {
     pub const DEFAULT_LANGUAGE: &str = "en_US";
     pub const DEFAULT_USE_CACHE: bool = false;
     pub const DEFAULT_DEBUG: bool = false;
-    pub const DEFAULT_SDK_VERSION: &str = "23";
     pub const DEFAULT_COUNTRY_CODE: &str = "us";
     pub const DEFAULT_AUTH_USER_AGENT: &str = "GoogleAuth/1.4";
     pub mod api_user_agent {
@@ -31,12 +30,11 @@ pub mod defaults {
     pub const DEFAULT_DOWNLOAD_USER_AGENT: &str =
         "AndroidDownloadManager/6.0.1 (Linux; U; Android 6.0.1; Nexus 7 Build/MOB30X)";
     pub const DEFAULT_PRE_FETCH: bool = false;
-    pub const DEFAULT_CACHE_INVALIDATION_INTERVAL: i32 = 30000; // 30 sec
-    pub const DEFAULT_DEVICE_COUNTRY: &str = "us";
-    pub const DEFAULT_CLIENT_ID: &str = "am-android-google";
-    pub const DEFAULT_ANDROID_VENDING: &str = "com.android.vending";
+    pub const DEFAULT_DEVICE_COUNTRY: &str = "en";
+    pub const DEFAULT_ANDROID_VENDING: &str = "com.google.android.gms";
     pub const DEFAULT_ACCOUNT_TYPE: &str = "HOSTED_OR_GOOGLE";
-    pub const DEFAULT_SERVICE: &str = "androidmarket";
+    pub const DEFAULT_GOOGLE_PLAY_SERVICES_VERSION: &str = "12866025";
+    pub const DEFAULT_SERVICE: &str = "ac2dm";
     pub const DEFAULT_LOGIN_URL: &str = "https://android.clients.google.com/auth";
     // pub const DEFAULT_LOGIN_URL: &str = "http://localhost:9990/auth";
     // const unsupported_experiments = [ "nocache:billing.use_charging_poller", "market_emails", "buyer_currency", "prod_baseline", "checkin.set_asset_paid_app_field", "shekel_test", "content_ratings", "buyer_currency_in_app", "nocache:encrypted_apk", "recent_changes" ],
