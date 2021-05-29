@@ -1,26 +1,22 @@
 pub mod consts;
 pub mod protos;
 
-extern crate base64;
-extern crate byteorder;
-extern crate hex;
-extern crate openssl;
-extern crate protobuf;
-extern crate reqwest;
+use std::collections::HashMap;
+use std::error::Error;
 
-extern crate serde_derive;
-extern crate serde;
+use hyper_openssl::HttpsConnector;
+use hyper::client::HttpConnector;
+use hyper::{Body, Client, Method, Request};
+use hyper::header::HeaderValue as HyperHeaderValue;
+use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::Url;
+use openssl::ssl::{SslConnector, SslMethod};
+use protobuf::Message;
 
 use protos::googleplay::{
     BulkDetailsRequest, BulkDetailsResponse, BuyResponse, DeliveryResponse, DetailsResponse,
     ResponseWrapper,
 };
-use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::Url;
-use std::collections::HashMap;
-use std::error::Error;
-
-use protobuf::Message;
 
 pub const STATUS_PURCHASE_UNAVAIL: i32 = 2;
 pub const STATUS_PURCHASE_REQD: i32 = 3;
@@ -32,15 +28,24 @@ pub struct Gpapi {
     pub password: String,
     pub token: String,
     client: Box<reqwest::Client>,
+    hyper_client: Box<hyper::Client<HttpsConnector<HttpConnector>>>,
 }
 
 impl Gpapi {
     pub fn new<S: Into<String>>(username: S, password: S) -> Self {
+        let mut http = HttpConnector::new();
+        http.enforce_http(false);
+        let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
+        connector.set_cipher_list(consts::GOOGLE_ACCEPTED_CIPHERS).unwrap();
+        let https = HttpsConnector::with_connector(http, connector).unwrap();
+        let hyper_client = Client::builder().build::<_, hyper::Body>(https);
+
         Gpapi {
             username: username.into(),
             password: password.into(),
             token: String::from(""),
             client: Box::new(reqwest::Client::new()),
+            hyper_client: Box::new(hyper_client),
         }
     }
 
@@ -164,8 +169,8 @@ impl Gpapi {
         // }
     }
 
-    pub fn authenticate(&mut self) -> Result<(), Box<dyn Error>> {
-        let form = self.login()?;
+    pub async fn authenticate(&mut self) -> Result<(), Box<dyn Error>> {
+        let form = self.login().await?;
         if let Some(token) = form.get("auth") {
             self.token = token.to_string();
             Ok(())
@@ -176,31 +181,28 @@ impl Gpapi {
 
     /// Handles logging into Google Play Store, retrieving a set of tokens from
     /// the server that can be used for future requests.
-    pub fn login(&self) -> Result<HashMap<String, String>, Box<dyn Error>> {
-        use consts::defaults::DEFAULT_LOGIN_URL;
-
-        let login_req = ::build_login_request(&self.username, &self.password);
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            reqwest::header::USER_AGENT,
-            HeaderValue::from_str(&consts::defaults::DEFAULT_AUTH_USER_AGENT)?,
-        );
-        headers.insert(
-            reqwest::header::CONTENT_TYPE,
-            HeaderValue::from_static("application/x-www-form-urlencoded; charset=UTF-8"),
-        );
+    pub async fn login(&self) -> Result<HashMap<String, String>, Box<dyn Error>> {
+        let login_req = build_login_request(&self.username, &self.password);
 
         let form_body = login_req.form_post();
-        let mut res = (*self.client)
-            .post(DEFAULT_LOGIN_URL)
-            .headers(headers)
-            .body(form_body)
-            .send()?;
+        let mut req = Request::builder()
+            .method(Method::POST)
+            .uri(consts::defaults::DEFAULT_LOGIN_URL)
+            .body(Body::from(form_body)).unwrap();
+        let headers = req.headers_mut();
+        headers.insert(
+            hyper::header::USER_AGENT,
+            HyperHeaderValue::from_str(&consts::defaults::DEFAULT_AUTH_USER_AGENT)?,
+        );
+        headers.insert(
+            hyper::header::CONTENT_TYPE,
+            HyperHeaderValue::from_static("application/x-www-form-urlencoded; charset=UTF-8"),
+        );
 
-        let mut buf = Vec::new();
-        res.copy_to(&mut buf)?;
-        let reply = parse_form_reply(&std::str::from_utf8(&buf).unwrap());
+        let res = self.hyper_client.request(req).await?;
+
+	let body_bytes = hyper::body::to_bytes(res.into_body()).await?;
+        let reply = parse_form_reply(&std::str::from_utf8(&body_bytes.to_vec()).unwrap());
         Ok(reply)
     }
 
@@ -525,15 +527,15 @@ mod tests {
         use std::env;
         use Gpapi;
 
-        #[test]
-        fn create_gpapi() {
+        #[tokio::test]
+        async fn create_gpapi() {
             match (
                 env::var("GOOGLE_LOGIN"),
                 env::var("GOOGLE_PASSWORD"),
             ) {
                 (Ok(username), Ok(password)) => {
                     let mut api = Gpapi::new(username, password);
-                    api.authenticate().ok();
+                    api.authenticate().await.ok();
                     assert!(api.token != "");
 
                     let details = api.details("com.viber.voip").ok();

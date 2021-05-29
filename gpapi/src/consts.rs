@@ -5,6 +5,9 @@ pub const GOOGLE_PUB_KEY_B64: &'static str = "AAAAgMom/1a/v0lblO2Ubrt60J2gcuXSlj
 pub const GOOGLE_PUB_MODULUS_HEXSTR: &'static str = "ca26ff56bfbf495b94ed946ebb7ad09da072e5d296318541781cc995af7962c4c28ea9af0822de224865da1dca129942b356a799ca277b2b4577145be175043ddb684546726120a9a2d950d0639b4e7ba4a448d7a901d18a69786c79a884394232b3b11f044d06ca2cd5a0458d1044d573df890c251dcffcb8076b1ffaae67f9";
 /// Google Play Public exponent
 pub const GOOGLE_PUB_EXP: u32 = 65537;
+/// Exact ciphersuite specification is needed, see:
+/// https://stackoverflow.com/questions/22832104/how-can-i-see-hidden-app-data-in-google-drive
+pub const GOOGLE_ACCEPTED_CIPHERS: &'static str = "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:ECDH+AESGCM:DH+AESGCM:ECDH+AES:DH+AES:RSA+AESGCM:RSA+AES:!aNULL:!eNULL:!MD5:!DSS";
 
 pub mod defaults {
     pub const DEFAULT_LANGUAGE: &str = "en_US";

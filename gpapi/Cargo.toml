@@ -1,20 +1,24 @@
 [package]
 name = "gpapi"
 version = "0.1.0"
-authors = ["David Weinstein <dweinst@insitusec.com>"]
+authors = ["David Weinstein <dweinst@insitusec.com>", "Bill Budington <bill@eff.org>"]
 build = "build.rs"
 license = "MIT"
+edition = "2018"
 
 [dependencies]
 protobuf = { version = "2.23", features = ["with-bytes", "with-serde"] }
 reqwest = "0.9.11"
 serde = "1"
 serde_derive = "1"
-openssl = "0.10.16"
+openssl = "0.10"
 base64 = "0.10.0"
 byteorder = "1.2.7"
 hex = "0.3.2"
 lazy_static = "1.2.0"
+hyper = { version = "0.14", features = ["full"] }
+hyper-openssl = "0.9"
+tokio = { version = "1", features = ["full"] }
 
 [build-dependencies]
 protobuf-codegen-pure = "2.23"
