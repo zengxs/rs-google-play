@@ -503,17 +503,19 @@ pub fn build_login_request(username: &str, password: &str) -> LoginRequest {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn login() {
-        let enc = ::encrypt_login("foo", "bar").unwrap();
+        let enc = encrypt_login("foo", "bar").unwrap();
         println!("encrypted: {:?}", base64::encode(&enc));
-        println!("base64_urlsafe: {:?}", ::base64_urlsafe(&enc));
+        println!("base64_urlsafe: {:?}", base64_urlsafe(&enc));
     }
 
     #[test]
     fn parse_form() {
         let form_reply = "FOO=BAR\nbaz=qux";
-        let x = ::parse_form_reply(&form_reply);
+        let x = parse_form_reply(&form_reply);
         println!("form (parsed): {:?}", x);
     }
 
@@ -525,7 +527,9 @@ mod tests {
     mod gpapi {
 
         use std::env;
-        use Gpapi;
+
+        use super::Gpapi;
+        use super::protos::googleplay::BulkDetailsRequest;
 
         #[tokio::test]
         async fn create_gpapi() {
@@ -548,7 +552,6 @@ mod tests {
 
         #[test]
         fn test_protobuf() {
-            use protos::googleplay::BulkDetailsRequest;
             let mut x = BulkDetailsRequest::new();
             x.docid = vec!["test".to_string()].into();
             x.includeDetails = Some(true);
