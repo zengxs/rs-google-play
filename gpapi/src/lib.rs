@@ -1,5 +1,4 @@
 pub mod consts;
-pub mod protos;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -11,11 +10,11 @@ use hyper::header::HeaderValue as HyperHeaderValue;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Url;
 use openssl::ssl::{SslConnector, SslMethod};
-use protobuf::Message;
+use protobuf::{Message, SingularPtrField};
 
-use protos::googleplay::{
+use googleplay_protobuf::{
     BulkDetailsRequest, BulkDetailsResponse, BuyResponse, DeliveryResponse, DetailsResponse,
-    ResponseWrapper,
+    DeviceConfigurationProto, ResponseWrapper, UploadDeviceConfigRequest, UploadDeviceConfigResponse,
 };
 
 pub const STATUS_PURCHASE_UNAVAIL: i32 = 2;
@@ -49,6 +48,21 @@ impl Gpapi {
         }
     }
 
+    pub fn upload_device_config(&self) -> Result<Option<UploadDeviceConfigResponse>, Box<dyn Error>> {
+        let mut req = UploadDeviceConfigRequest::new();
+        let devices_encoded = include_bytes!("device_properties.bin");
+        let device_configurations: HashMap<String, DeviceConfigurationProto> = bincode::deserialize(devices_encoded).unwrap();
+        req.deviceConfiguration = SingularPtrField::from(device_configurations.get("hero2lte").map(|c| c.clone()));
+        let bytes = req.write_to_bytes()?;
+        let resp = self.execute_request_v2(
+            "uploadDeviceConfig", None, Some(&bytes), None)?;
+        if let Some(payload) = resp.payload.into_option() {
+            Ok(payload.uploadDeviceConfigResponse.into_option())
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Play Store package detail request (provides more detail than bulk requests).
     pub fn details(&self, pkg_name: &str) -> Result<Option<DetailsResponse>, Box<dyn Error>> {
         let mut req = HashMap::new();
@@ -67,7 +81,6 @@ impl Gpapi {
     ) -> Result<Option<BulkDetailsResponse>, Box<dyn Error>> {
         let mut req = BulkDetailsRequest::new();
         req.docid = pkg_names.into_iter().cloned().map(String::from).collect();
-        req.includeDetails = Some(true);
         req.includeChildDocs = Some(false);
         let bytes = req.write_to_bytes()?;
         let resp = self.execute_request_v2(
@@ -87,29 +100,9 @@ impl Gpapi {
         if let Ok(Some(ref app_delivery_resp)) = self.app_delivery_data(pkg_name, vc) {
             match app_delivery_resp {
                 DeliveryResponse {
-                    status: None,
                     appDeliveryData: app_delivery_data,
                     ..
                 } => Ok(app_delivery_data.clone().unwrap().downloadUrl.into_option()),
-                DeliveryResponse {
-                    status: Some(STATUS_PURCHASE_UNAVAIL),
-                    ..
-                } => Err(format!("can't locate {}", pkg_name).into()),
-                DeliveryResponse {
-                    status: Some(STATUS_PURCHASE_REQD),
-                    ..
-                } => match self.purchase(pkg_name, vc) {
-                    Ok(Some(purchase_resp)) => Ok(purchase_resp
-                        .purchaseStatusResponse
-                        .unwrap_or_default()
-                        .appDeliveryData
-                        .unwrap_or_default()
-                        .downloadUrl
-                        .into_option()),
-                    Err(err) => Err(format!("error purchasing {:?}", err).into()),
-                    _ => unimplemented!(),
-                },
-                _ => unimplemented!(),
             }
         } else {
             if let Ok(Some(purchase_resp)) = self.purchase(pkg_name, vc) {
@@ -232,27 +225,39 @@ impl Gpapi {
         );
         headers.insert(
             reqwest::header::ACCEPT_LANGUAGE,
-            HeaderValue::from_static("en_US"),
+            HeaderValue::from_static("en-US"),
         );
         headers.insert(
             reqwest::header::AUTHORIZATION,
             HeaderValue::from_str(&format!("GoogleLogin auth={}", self.token))?,
         );
+
         headers.insert(
-            "X-DFE-Enabled-Experiments",
-            HeaderValue::from_static("cl:billing.select_add_instrument_by_default"),
+            "X-DFE-Encoded-Targets",
+            HeaderValue::from_static(consts::defaults::DEFAULT_DFE_TARGETS),
         );
-        headers.insert("X-DFE-Unsupported-Experiments", HeaderValue::from_static("nocache:billing.use_charging_poller,market_emails,buyer_currency,prod_baseline,checkin.set_asset_paid_app_field,shekel_test,content_ratings,buyer_currency_in_app,nocache:encrypted_apk,recent_changes"));
+
         headers.insert(
             "X-DFE-Client-Id",
             HeaderValue::from_static("am-android-google"),
         );
         headers.insert(
-            "X-DFE-SmallestScreenWidthDp",
-            HeaderValue::from_static("320"),
+            "X-DFE-MCCMCN",
+            HeaderValue::from_static("310260"),
         );
-        headers.insert("X-DFE-Filter-Level", HeaderValue::from_static("3"));
-        headers.insert("X-DFE-No-Prefetch", HeaderValue::from_static("true"));
+        headers.insert(
+            "X-DFE-Network-Type",
+            HeaderValue::from_static("4"),
+        );
+        headers.insert(
+            "X-DFE-Content-Filters",
+            HeaderValue::from_static(""),
+        );
+        headers.insert(
+            "X-DFE-Request-Params",
+            HeaderValue::from_static("timeoutMs=4000"),
+        );
+
 
         if let Some(content_type) = content_type {
             headers.insert(
@@ -428,15 +433,16 @@ pub struct BuildConfiguration {
     pub model: String,
     pub build_id: String,
     pub is_wide_screen: String,
+    pub supported_abis: String,
 }
 
 impl BuildConfiguration {
     pub fn user_agent(&self) -> String {
-        format!("{}/{} (api={},versionCode={},sdk={},device={},hardware={},product={},platformVersionRelease={},model={},buildId={},isWideScreen={})", 
+        format!("{}/{} (api={},versionCode={},sdk={},device={},hardware={},product={},platformVersionRelease={},model={},buildId={},isWideScreen={},supportedAbis={})", 
           self.finsky_agent, self.finsky_version, self.api, self.version_code, self.sdk,
           self.device, self.hardware, self.product,
           self.platform_version_release, self.model, self.build_id,
-          self.is_wide_screen
+          self.is_wide_screen, self.supported_abis
         )
     }
 }
@@ -445,8 +451,9 @@ impl Default for BuildConfiguration {
     fn default() -> BuildConfiguration {
         use consts::defaults::api_user_agent::{
             DEFAULT_API, DEFAULT_BUILD_ID, DEFAULT_DEVICE, DEFAULT_HARDWARE,
-            DEFAULT_IS_WIDE_SCREEN, DEFAULT_MODEL, DEFAULT_PLATFORM_VERSION_RELEASE,
-            DEFAULT_PRODUCT, DEFAULT_SDK, DEFAULT_VERSION_CODE,
+            DEFAULT_IS_WIDE_SCREEN, DEFAULT_SUPPORTED_ABIS, DEFAULT_MODEL,
+            DEFAULT_PLATFORM_VERSION_RELEASE, DEFAULT_PRODUCT, DEFAULT_SDK,
+            DEFAULT_VERSION_CODE,
         };
         use consts::defaults::{DEFAULT_FINSKY_AGENT, DEFAULT_FINSKY_VERSION};
 
@@ -463,6 +470,7 @@ impl Default for BuildConfiguration {
             model: DEFAULT_MODEL.to_string(),
             build_id: DEFAULT_BUILD_ID.to_string(),
             is_wide_screen: DEFAULT_IS_WIDE_SCREEN.to_string(),
+            supported_abis: DEFAULT_SUPPORTED_ABIS.to_string(),
         }
     }
 }
@@ -554,7 +562,6 @@ mod tests {
         fn test_protobuf() {
             let mut x = BulkDetailsRequest::new();
             x.docid = vec!["test".to_string()].into();
-            x.includeDetails = Some(true);
             x.includeChildDocs = Some(true);
         }
     }

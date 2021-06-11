@@ -17,19 +17,20 @@ pub mod defaults {
     pub const DEFAULT_AUTH_USER_AGENT: &str = "GoogleAuth/1.4";
     pub mod api_user_agent {
         pub const DEFAULT_API: &str = "3";
-        pub const DEFAULT_VERSION_CODE: &str = "80420700";
-        pub const DEFAULT_SDK: &str = "23";
-        pub const DEFAULT_DEVICE: &str = "flo";
-        pub const DEFAULT_HARDWARE: &str = "flo";
-        pub const DEFAULT_PRODUCT: &str = "razor";
-        pub const DEFAULT_PLATFORM_VERSION_RELEASE: &str = "6.0.1";
-        pub const DEFAULT_MODEL: &str = "Nexus%207";
-        pub const DEFAULT_BUILD_ID: &str = "MOB30X";
+        pub const DEFAULT_VERSION_CODE: &str = "81053300";
+        pub const DEFAULT_SDK: &str = "27";
+        pub const DEFAULT_DEVICE: &str = "hero2lte";
+        pub const DEFAULT_HARDWARE: &str = "samsungexynos8890";
+        pub const DEFAULT_PRODUCT: &str = "hero2ltexx";
+        pub const DEFAULT_PLATFORM_VERSION_RELEASE: &str = "8.1.0";
+        pub const DEFAULT_MODEL: &str = "SM-G935F";
+        pub const DEFAULT_BUILD_ID: &str = "OPM2.171019.029.B1";
         pub const DEFAULT_IS_WIDE_SCREEN: &str = "0";
+        pub const DEFAULT_SUPPORTED_ABIS: &str = "arm64-v8a;armeabi-v7a;armeabi";
     }
     pub const DEFAULT_FINSKY_AGENT: &str = "Android-Finsky";
-    pub const DEFAULT_FINSKY_VERSION: &str = "5.12.7";
-    // pub const DEFAULT_API_USER_AGENT: &str = "Android-Finsky/5.12.7 (api=3,versionCode=80420700,sdk=23,device=flo,hardware=flo,product=razor,platformVersionRelease=6.0.1,model=Nexus 7,buildId=MOB30X,isWideScreen=0)";
+    pub const DEFAULT_FINSKY_VERSION: &str = "10.5.33-all [0] [PR] 201016072";
+    pub const DEFAULT_DFE_TARGETS: &str = "CAEScFfqlIEG6gUYogFWrAISK1WDAg+hAZoCDgIU1gYEOIACFkLMAeQBnASLATlASUuyAyqCAjY5igOMBQzfA/IClwFbApUC4ANbtgKVAS7OAX8YswHFBhgDwAOPAmGEBt4OfKkB5weSB5AFASkiN68akgMaxAMSAQEBA9kBO7UBFE1KVwIDBGs3go6BBgEBAgMECQgJAQIEAQMEAQMBBQEBBAUEFQYCBgUEAwMBDwIBAgOrARwBEwMEAg0mrwESfTEcAQEKG4EBMxghChMBDwYGASI3hAEODEwXCVh/EREZA4sBYwEdFAgIIwkQcGQRDzQ2fTC2AjfVAQIBAYoBGRg2FhYFBwEqNzACJShzFFblAo0CFxpFNBzaAd0DHjIRI4sBJZcBPdwBCQGhAUd2A7kBLBVPngEECHl0UEUMtQETigHMAgUFCc0BBUUlTywdHDgBiAJ+vgKhAU0uAcYCAWQ/5ALUAw1UwQHUBpIBCdQDhgL4AY4CBQICjARbGFBGWzA1CAEMOQH+BRAOCAZywAIDyQZ2MgM3BxsoAgUEBwcHFia3AgcGTBwHBYwBAlcBggFxSGgIrAEEBw4QEqUCASsWadsHCgUCBQMD7QICA3tXCUw7ugJZAwGyAUwpIwM5AwkDBQMJA5sBCw8BNxBVVBwVKhebARkBAwsQEAgEAhESAgQJEBCZATMdzgEBBwG8AQQYKSMUkAEDAwY/CTs4/wEaAUt1AwEDAQUBAgIEAwYEDx1dB2wGeBFgTQ";
     pub const DEFAULT_DOWNLOAD_USER_AGENT: &str =
         "AndroidDownloadManager/6.0.1 (Linux; U; Android 6.0.1; Nexus 7 Build/MOB30X)";
     pub const DEFAULT_PRE_FETCH: bool = false;
