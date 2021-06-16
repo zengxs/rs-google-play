@@ -1,6 +1,5 @@
 [workspace]
 members = [
     "gpapi",
-    "gpapi-cli",
     "googleplay-protobuf",
 ]
