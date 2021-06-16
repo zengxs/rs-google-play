@@ -11,6 +11,8 @@ pub const GOOGLE_ACCEPTED_CIPHERS: &'static str = "TLS_AES_256_GCM_SHA384:TLS_CH
 
 pub mod defaults {
     pub const DEFAULT_LANGUAGE: &str = "en_US";
+    pub const DEFAULT_CLIENT_SIG: &str = "38918a453d07199354f8b19af05ec6562ced5788";
+    pub const DEFAULT_CALLER_SIG: &str = "38918a453d07199354f8b19af05ec6562ced5788";
     pub const DEFAULT_USE_CACHE: bool = false;
     pub const DEFAULT_DEBUG: bool = false;
     pub const DEFAULT_COUNTRY_CODE: &str = "us";
@@ -39,7 +41,7 @@ pub mod defaults {
     pub const DEFAULT_ACCOUNT_TYPE: &str = "HOSTED_OR_GOOGLE";
     pub const DEFAULT_GOOGLE_PLAY_SERVICES_VERSION: &str = "12866025";
     pub const DEFAULT_SERVICE: &str = "ac2dm";
-    pub const DEFAULT_LOGIN_URL: &str = "https://android.clients.google.com/auth";
+    pub const DEFAULT_BASE_URL: &str = "https://android.clients.google.com";
     // pub const DEFAULT_LOGIN_URL: &str = "http://localhost:9990/auth";
     // const unsupported_experiments = [ "nocache:billing.use_charging_poller", "market_emails", "buyer_currency", "prod_baseline", "checkin.set_asset_paid_app_field", "shekel_test", "content_ratings", "buyer_currency_in_app", "nocache:encrypted_apk", "recent_changes" ],
     // const enabled_experiments = vec!["cl:billing.select_add_instrument_by_default" ];
