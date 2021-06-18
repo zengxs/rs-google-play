@@ -1,4 +1,4 @@
-pub mod consts;
+mod consts;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -29,10 +29,6 @@ lazy_static! {
     static ref DEVICE_CONFIGURATIONS: HashMap<String, DeviceConfigurationProto> = bincode::deserialize(DEVICES_ENCODED).unwrap();
     static ref ANDROID_CHECKINS: HashMap<String, AndroidCheckinProto> = bincode::deserialize(CHECKINS_ENCODED).unwrap();
 }
-
-pub const STATUS_PURCHASE_UNAVAIL: i32 = 2;
-pub const STATUS_PURCHASE_REQD: i32 = 3;
-pub const STATUS_PURCHASE_ERR: i32 = 5;
 
 /// The Gpapi object is the sole way to interact with the Play Store API.  It abstracts the logic
 /// of low-level communication with Google's Play Store servers.
