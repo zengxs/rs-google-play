@@ -15,8 +15,8 @@ use protobuf::{Message, SingularField, SingularPtrField};
 
 use googleplay_protobuf::{
     AndroidCheckinProto, AndroidCheckinRequest, AndroidCheckinResponse, BulkDetailsRequest,
-    BulkDetailsResponse, BuyResponse, DeliveryResponse, DetailsResponse, DeviceConfigurationProto,
-    ResponseWrapper, UploadDeviceConfigRequest, UploadDeviceConfigResponse,
+    BulkDetailsResponse, DetailsResponse, DeviceConfigurationProto, ResponseWrapper,
+    UploadDeviceConfigRequest, UploadDeviceConfigResponse,
 };
 
 #[macro_use]
@@ -33,6 +33,8 @@ pub const STATUS_PURCHASE_UNAVAIL: i32 = 2;
 pub const STATUS_PURCHASE_REQD: i32 = 3;
 pub const STATUS_PURCHASE_ERR: i32 = 5;
 
+/// The Gpapi object is the sole way to interact with the Play Store API.  It abstracts the logic
+/// of low-level communication with Google's Play Store servers.
 #[derive(Debug)]
 pub struct Gpapi {
     locale: String,
@@ -48,6 +50,13 @@ pub struct Gpapi {
 }
 
 impl Gpapi {
+    /// Returns a Gpapi struct with locale, timezone, and the device codename specified.
+    ///
+    /// # Arguments
+    ///
+    /// * `locale` - A string type specifying the device locale, e.g. "en_US"
+    /// * `timezone` - A string type specifying the timezone , e.g. "UTC"
+    /// * `device_codename` - A string type specifying the device codename, e.g. "hero2lte"
     pub fn new<S: Into<String>>(locale: S, timezone: S, device_codename: S) -> Self {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
@@ -70,7 +79,34 @@ impl Gpapi {
         }
     }
 
-    pub fn checkin(&mut self, username: &str, ac2dm_token: &str) -> Result<Option<i64>, Box<dyn Error>> {
+    /// Authenticate with Google's Play Store API.  This is required for most other actions.
+    ///
+    /// # Arguments
+    ///
+    /// * `username` - A string type specifying the login username, usually a full email
+    /// * `password` - A string type specifying an app password, created from your Google account
+    /// settings.
+    pub async fn authenticate<S: Into<String> + Clone>(&mut self, username: S, password: S) -> Result<(), Box<dyn Error>> {
+        let username = username.into();
+        let login = encrypt_login(&username, &password.into()).unwrap();
+        let encrypted_password = base64_urlsafe(&login);
+        let form = self.login(&username, &encrypted_password).await?;
+        if let Some(token) = form.get("auth") {
+            let token = token.to_string();
+            self.gsf_id = self.checkin(&username, &token)?;
+            self.get_auth_subtoken(&username, &encrypted_password).await?;
+            if let Some(upload_device_config_token) = self.upload_device_config()? {
+                self.device_config_token = Some(upload_device_config_token.uploadDeviceConfigToken.unwrap());
+                Ok(())
+            } else {
+                Err("No device config token".into())
+            }
+        } else {
+            Err("No GSF auth token".into())
+        }
+    }
+
+    fn checkin(&mut self, username: &str, ac2dm_token: &str) -> Result<Option<i64>, Box<dyn Error>> {
         let mut checkin = ANDROID_CHECKINS.get(&self.device_codename).map(|c| c.clone())
             .expect("Invalid device codename");
 
@@ -100,7 +136,7 @@ impl Gpapi {
         Ok(resp.androidId.map(|id| id as i64))
     }
 
-    pub fn upload_device_config(&self) -> Result<Option<UploadDeviceConfigResponse>, Box<dyn Error>> {
+    fn upload_device_config(&self) -> Result<Option<UploadDeviceConfigResponse>, Box<dyn Error>> {
         let mut req = UploadDeviceConfigRequest::new();
         req.deviceConfiguration = SingularPtrField::from(DEVICE_CONFIGURATIONS.get(&self.device_codename).map(|c| c.clone()));
         //let headers = self.get_headers();
@@ -128,10 +164,72 @@ impl Gpapi {
         }
     }
 
+    pub fn get_download_url<S: Into<String>>(&self, pkg_name: S, mut version_code: Option<i32>) -> Result<Option<String>, Box<dyn Error>> {
+        let pkg_name = pkg_name.into();
+        if self.auth_subtoken.is_none() {
+            return Err("Logging in is required for this action".into());
+        }
+        if version_code.is_none() {
+            if let Some(details) = self.details(&pkg_name)? {
+                version_code = details.docV2.unwrap().details.unwrap().appDetails.unwrap().versionCode;
+            } else {
+                return Err(format!("Cannot get details for {}", pkg_name).into());
+            }
+        }
+        let resp = {
+            let version_code_str = version_code.unwrap().to_string();
+            let mut req = HashMap::new();
+            req.insert("ot", "1");
+            req.insert("doc", &pkg_name);
+            req.insert("vc", &version_code_str);
+            self.execute_request_v2("purchase", Some(req), None, HeaderMap::new())?
+        };
+        if let Some(payload) = resp.payload.into_option() {
+            if let Some(download_token) = payload.buyResponse.unwrap().downloadToken.into_option() {
+                self.delivery(&pkg_name, version_code.clone(), &download_token)
+            } else {
+                Err("App not purchased".into())
+            }
+        } else {
+            Err("No valid response from server".into())
+        }
+    }
+
+    pub fn delivery<S: Into<String>>(&self, pkg_name: S, mut version_code: Option<i32>, download_token: S) -> Result<Option<String>, Box<dyn Error>> {
+        let pkg_name = pkg_name.into();
+        let download_token = download_token.into();
+        if self.auth_subtoken.is_none() {
+            return Err("Logging in is required for this action".into());
+        }
+        if version_code.is_none() {
+            if let Some(details) = self.details(&pkg_name)? {
+                version_code = details.docV2.unwrap().details.unwrap().appDetails.unwrap().versionCode;
+            } else {
+                return Err(format!("Cannot get details for {}", pkg_name).into());
+            }
+        }
+        let resp = {
+            let version_code_str = version_code.unwrap().to_string();
+            let mut req = HashMap::new();
+            req.insert("ot", "1");
+            req.insert("doc", &pkg_name);
+            req.insert("vc", &version_code_str);
+            req.insert("dtok", &download_token);
+            self.execute_request_v2("delivery", Some(req), None, HeaderMap::new())?
+        };
+        if let Some(payload) = resp.payload.into_option() {
+            Ok(payload.deliveryResponse.unwrap().appDeliveryData.unwrap().downloadUrl.into_option())
+        } else {
+            Err("No valid response from server".into())
+        }
+
+    }
+
     /// Play Store package detail request (provides more detail than bulk requests).
-    pub fn details(&self, pkg_name: &str) -> Result<Option<DetailsResponse>, Box<dyn Error>> {
+    pub fn details<S: Into<String>>(&self, pkg_name: S) -> Result<Option<DetailsResponse>, Box<dyn Error>> {
+        let pkg_name = pkg_name.into();
         let mut req = HashMap::new();
-        req.insert("doc", pkg_name);
+        req.insert("doc", &pkg_name[..]);
         let resp = self.execute_request_v2("details", Some(req), None, HeaderMap::new())?;
         if let Some(payload) = resp.payload.into_option() {
             Ok(payload.detailsResponse.into_option())
@@ -161,103 +259,7 @@ impl Gpapi {
         }
     }
 
-    pub fn get_download_url(&self, pkg_name: &str, vc: u64) -> Result<Option<String>, Box<dyn Error>> {
-        if let Ok(Some(ref app_delivery_resp)) = self.app_delivery_data(pkg_name, vc) {
-            match app_delivery_resp {
-                DeliveryResponse {
-                    appDeliveryData: app_delivery_data,
-                    ..
-                } => Ok(app_delivery_data.clone().unwrap().downloadUrl.into_option()),
-            }
-        } else {
-            if let Ok(Some(purchase_resp)) = self.purchase(pkg_name, vc) {
-                Ok(purchase_resp
-                    .purchaseStatusResponse
-                    .unwrap()
-                    .appDeliveryData
-                    .unwrap()
-                    .downloadUrl
-                    .into_option())
-            } else {
-                Err("didn't get purchase data".into())
-            }
-        }
-    }
-
-    pub fn app_delivery_data(
-        &self,
-        pkg_name: &str,
-        vc: u64,
-    ) -> Result<Option<DeliveryResponse>, Box<dyn Error>> {
-        let vc = vc.to_string();
-
-        let mut req = HashMap::new();
-
-        req.insert("doc", pkg_name);
-        req.insert("vc", &vc);
-        req.insert("ot", "1");
-
-        let delivery_resp = self.execute_request_v2(
-            "delivery",
-            Some(req),
-            None,
-            HeaderMap::new(),
-        )?;
-        if let Some(payload) = delivery_resp.payload.into_option() {
-            Ok(payload.deliveryResponse.into_option())
-        } else {
-            Ok(None)
-        }
-    }
-
-    pub fn purchase(&self, pkg_name: &str, vc: u64) -> Result<Option<BuyResponse>, Box<dyn Error>> {
-        let vc = vc.to_string();
-        let body = format!("ot=1&doc={}&vc={}", pkg_name, vc);
-        let body_bytes = body.into_bytes();
-
-        let resp = self.execute_request_v2(
-            "purchase",
-            None,
-            Some(&body_bytes),
-            HeaderMap::new(),
-        )?;
-        match resp {
-            ResponseWrapper {
-                commands, payload, ..
-            } => match (commands.into_option(), payload.into_option()) {
-                (_, Some(payload)) => Ok(payload.buyResponse.into_option()),
-                (Some(commands), _) => Err(commands.displayErrorMessage.unwrap().into()),
-                _ => unimplemented!(),
-            }, // ResponseWrapper { commands: SingularPtrField<ServerCommands>::some(commands), .. } => Err(commands.displayErrorMessage)
-        }
-        // if let Some(payload) = resp.payload.into_option() {
-        //     Ok(payload.buyResponse.into_option())
-        // } else {
-        //     Ok(None)
-        // }
-    }
-
-    pub async fn authenticate<S: Into<String> + Clone>(&mut self, username: S, password: S) -> Result<(), Box<dyn Error>> {
-        let username = username.into();
-        let login = encrypt_login(&username, &password.into()).unwrap();
-        let encrypted_password = base64_urlsafe(&login);
-        let form = self.login(&username, &encrypted_password).await?;
-        if let Some(token) = form.get("auth") {
-            let token = token.to_string();
-            self.gsf_id = self.checkin(&username, &token)?;
-            self.get_auth_subtoken(&username, &encrypted_password).await?;
-            if let Some(upload_device_config_token) = self.upload_device_config()? {
-                self.device_config_token = Some(upload_device_config_token.uploadDeviceConfigToken.unwrap());
-                Ok(())
-            } else {
-                Err("No device config token".into())
-            }
-        } else {
-            Err("No GSF auth token".into())
-        }
-    }
-
-    pub async fn get_auth_subtoken(&mut self, username: &str, encrypted_password: &str) -> Result<(), Box<dyn Error>> {
+    async fn get_auth_subtoken(&mut self, username: &str, encrypted_password: &str) -> Result<(), Box<dyn Error>> {
         let mut login_req = build_login_request(username, encrypted_password);
         login_req.params.insert(String::from("service"), String::from("androidmarket"));
         login_req.params.insert(String::from("app"), String::from("com.android.vending"));
@@ -270,7 +272,7 @@ impl Gpapi {
         Ok(())
     }
 
-    pub async fn get_second_round_token(&self, master_token: &str, mut login_req: LoginRequest) -> Result<Option<String>, Box<dyn Error>> {
+    async fn get_second_round_token(&self, master_token: &str, mut login_req: LoginRequest) -> Result<Option<String>, Box<dyn Error>> {
         if let Some(gsf_id) = self.gsf_id {
             login_req.params.insert(String::from("androidId"), format!("{:x}", gsf_id));
         }
@@ -287,13 +289,13 @@ impl Gpapi {
 
     /// Handles logging into Google Play Store, retrieving a set of tokens from
     /// the server that can be used for future requests.
-    pub async fn login(&self, username: &str, encrypted_password: &str) -> Result<HashMap<String, String>, Box<dyn Error>> {
+    async fn login(&self, username: &str, encrypted_password: &str) -> Result<HashMap<String, String>, Box<dyn Error>> {
         let login_req = build_login_request(username, encrypted_password);
 
         self.login_helper(&login_req).await
     }
 
-    pub async fn login_helper(&self, login_req: &LoginRequest) -> Result<HashMap<String, String>, Box<dyn Error>> {
+    async fn login_helper(&self, login_req: &LoginRequest) -> Result<HashMap<String, String>, Box<dyn Error>> {
         let form_body = login_req.form_post();
 
         let mut req = Request::builder()
@@ -326,7 +328,7 @@ impl Gpapi {
     /// Lower level Play Store request, used by APIs but exposed for specialized
     /// requests. Returns a `ResponseWrapper` which depending on the request
     /// populates different fields/values.
-    pub fn execute_request_v2(
+    fn execute_request_v2(
         &self,
         endpoint: &str,
         query: Option<HashMap<&str, &str>>,
@@ -339,14 +341,14 @@ impl Gpapi {
         Ok(resp)
     }
 
-    pub fn execute_checkin_request(&self, msg: &[u8]) -> Result<AndroidCheckinResponse, Box<dyn Error>> {
+    fn execute_checkin_request(&self, msg: &[u8]) -> Result<AndroidCheckinResponse, Box<dyn Error>> {
         let bytes = self.execute_request_helper("checkin", None, Some(msg), HeaderMap::new(), false)?;
         let mut resp = AndroidCheckinResponse::new();
         resp.merge_from_bytes(&bytes)?;
         Ok(resp)
     }
 
-    pub fn execute_request_helper(
+    fn execute_request_helper(
         &self,
         endpoint: &str,
         query: Option<HashMap<&str, &str>>,
@@ -423,6 +425,7 @@ impl Gpapi {
                 HeaderValue::from_str(&dfe_cookie)?);
         }
 
+        let query2 = query.clone();
         if let Some(query) = query {
             let mut queries = url.query_pairs_mut();
             for (key, val) in query {
@@ -430,14 +433,22 @@ impl Gpapi {
             }
         }
 
-        let mut res = if let Some(msg) = msg {
+        let mut res = if endpoint == "purchase" {
             (*self.client)
                 .post(url)
                 .headers(headers)
-                .body(msg.to_owned())
+                .form(&query2.unwrap())
                 .send()?
         } else {
-            (*self.client).get(url).headers(headers).send()?
+            if let Some(msg) = msg {
+                (*self.client)
+                    .post(url)
+                    .headers(headers)
+                    .body(msg.to_owned())
+                    .send()?
+            } else {
+                (*self.client).get(url).headers(headers).send()?
+            }
         };
 
         let mut buf = Vec::new();
