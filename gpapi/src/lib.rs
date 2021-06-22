@@ -37,9 +37,9 @@ pub struct Gpapi {
     locale: String,
     timezone: String,
     device_codename: String,
-    auth_subtoken: Option<String>,
-    device_config_token: Option<String>,
-    device_checkin_consistency_token: Option<String>,
+    pub(crate) auth_subtoken: Option<String>,
+    pub(crate) device_config_token: Option<String>,
+    pub(crate) device_checkin_consistency_token: Option<String>,
     dfe_cookie: Option<String>,
     gsf_id: Option<i64>,
     client: Box<reqwest::Client>,
@@ -76,18 +76,18 @@ impl Gpapi {
         }
     }
 
-    /// Authenticate with Google's Play Store API.  This is required for most other actions.
+    /// Log in to Google's Play Store API.  This is required for most other actions.
     ///
     /// # Arguments
     ///
     /// * `username` - A string type specifying the login username, usually a full email
     /// * `password` - A string type specifying an app password, created from your Google account
     /// settings.
-    pub async fn authenticate<S: Into<String> + Clone>(&mut self, username: S, password: S) -> Result<(), Box<dyn Error>> {
+    pub async fn login<S: Into<String> + Clone>(&mut self, username: S, password: S) -> Result<(), Box<dyn Error>> {
         let username = username.into();
         let login = encrypt_login(&username, &password.into()).unwrap();
         let encrypted_password = base64_urlsafe(&login);
-        let form = self.login(&username, &encrypted_password).await?;
+        let form = self.authenticate(&username, &encrypted_password).await?;
         if let Some(token) = form.get("auth") {
             let token = token.to_string();
             self.gsf_id = self.checkin(&username, &token).await?;
@@ -262,7 +262,7 @@ impl Gpapi {
         login_req.params.insert(String::from("app"), String::from("com.android.vending"));
         let second_login_req = login_req.clone();
 
-        let reply = self.login_helper(&login_req).await?;
+        let reply = self.authenticate_helper(&login_req).await?;
         if let Some(master_token) = reply.get("token") {
             self.auth_subtoken = self.get_second_round_token(master_token, second_login_req).await?;
         }
@@ -280,19 +280,19 @@ impl Gpapi {
         login_req.params.insert(String::from("_opt_is_called_from_account_manager"), String::from("1"));
         login_req.params.remove("Email");
         login_req.params.remove("EncryptedPasswd");
-        let reply = self.login_helper(&login_req).await?;
+        let reply = self.authenticate_helper(&login_req).await?;
         Ok(reply.get("auth").map(|a| String::from(a)))
     }
 
-    /// Handles logging into Google Play Store, retrieving a set of tokens from
+    /// Handles authenticating with Google Play Store, retrieving a set of tokens from
     /// the server that can be used for future requests.
-    async fn login(&self, username: &str, encrypted_password: &str) -> Result<HashMap<String, String>, Box<dyn Error>> {
+    async fn authenticate(&self, username: &str, encrypted_password: &str) -> Result<HashMap<String, String>, Box<dyn Error>> {
         let login_req = build_login_request(username, encrypted_password);
 
-        self.login_helper(&login_req).await
+        self.authenticate_helper(&login_req).await
     }
 
-    async fn login_helper(&self, login_req: &LoginRequest) -> Result<HashMap<String, String>, Box<dyn Error>> {
+    async fn authenticate_helper(&self, login_req: &LoginRequest) -> Result<HashMap<String, String>, Box<dyn Error>> {
         let form_body = login_req.form_post();
 
         let mut req = Request::builder()
@@ -657,17 +657,12 @@ mod tests {
         println!("form (parsed): {:?}", x);
     }
 
-    #[test]
-    fn foobar() {
-        assert!(1 == 1);
-    }
-
     mod gpapi {
 
         use std::env;
 
         use super::Gpapi;
-        use super::protos::googleplay::BulkDetailsRequest;
+        use googleplay_protobuf::BulkDetailsRequest;
 
         #[tokio::test]
         async fn create_gpapi() {
@@ -676,13 +671,15 @@ mod tests {
                 env::var("GOOGLE_PASSWORD"),
             ) {
                 (Ok(username), Ok(password)) => {
-                    let mut api = Gpapi::new(username, password);
-                    api.authenticate().await.ok();
-                    assert!(api.token != "");
+                    let mut api = Gpapi::new("en_US", "UTC", "hero2lte");
+                    api.login(username, password).await.ok();
+                    assert!(api.auth_subtoken.is_some());
+                    assert!(api.device_config_token.is_some());
+                    assert!(api.device_checkin_consistency_token.is_some());
 
-                    let details = api.details("com.viber.voip").ok();
+                    assert!(api.details("com.viber.voip").await.is_ok());
                     let pkg_names = ["com.viber.voip", "air.WatchESPN"];
-                    let bulk_details = api.bulk_details(&pkg_names).ok();
+                    assert!(api.bulk_details(&pkg_names).await.is_ok());
                 }
                 _ => panic!("require login/password for test"),
             }
