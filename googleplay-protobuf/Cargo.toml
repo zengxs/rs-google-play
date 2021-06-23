@@ -5,6 +5,8 @@ authors = ["David Weinstein <dweinst@insitusec.com>", "Bill Budington <bill@eff.
 build = "build.rs"
 license = "MIT"
 edition = "2018"
+description = "The automatically generated types derived from the Google Play Protobuf specification."
+repository = "https://github.com/Hainish/rs-google-play/tree/master/googleplay-protobuf"
 
 [features]
 with-serde = []
