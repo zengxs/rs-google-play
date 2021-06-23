@@ -1,5 +1,3 @@
-rs-gpapi
-========
+# `gpapi`
 
-Rust `gpapi` library upon which CLI tools can easily be built on top.
-
+Rust Google Play API library upon which CLI tools can easily be built on top.
