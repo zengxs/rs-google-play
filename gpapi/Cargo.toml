@@ -5,6 +5,9 @@ authors = ["David Weinstein <dweinst@insitusec.com>", "Bill Budington <bill@eff.
 build = "build.rs"
 license = "MIT"
 edition = "2018"
+description = "A library for interacting with the Google Play API"
+homepage = "https://github.com/Hainish/rs-google-play"
+repository = "https://github.com/Hainish/rs-google-play"
 
 [dependencies]
 protobuf = { version = "2", features = ["with-bytes", "with-serde"] }
@@ -18,13 +21,13 @@ lazy_static = "1.4"
 hyper = { version = "0.14", features = ["full"] }
 hyper-openssl = "0.9"
 tokio = { version = "1", features = ["full"] }
-googleplay-protobuf = { path = "../googleplay-protobuf", features = ["with-serde"] }
+googleplay-protobuf = { version = "0.1", features = ["with-serde"] }
 bincode = "1"
 futures-util = { version = "0.3", features = ["io"] }
 tokio-util = { version = "0.6", features = ["io"] }
 
 [build-dependencies]
-googleplay-protobuf = { path = "../googleplay-protobuf", features = ["with-serde"] }
+googleplay-protobuf = { version = "0.1", features = ["with-serde"] }
 protobuf = { version = "2", features = ["with-bytes", "with-serde"] }
 bincode = "1"
 configparser = "2"
