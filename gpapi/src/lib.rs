@@ -2,17 +2,22 @@ mod consts;
 
 use std::collections::HashMap;
 use std::error::Error;
+use std::io::{Error as IOError, ErrorKind};
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
+use futures_util::stream::Stream;
+use futures_util::StreamExt;
 use hyper_openssl::HttpsConnector;
 use hyper::client::HttpConnector;
 use hyper::{Body, Client, Method, Request};
 use hyper::header::{HeaderValue as HyperHeaderValue, HeaderName as HyperHeaderName};
-use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::Url;
 use openssl::ssl::{SslConnector, SslMethod};
 use protobuf::{Message, SingularField, SingularPtrField};
+use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::Url;
+use tokio_util::io::StreamReader;
 
 use googleplay_protobuf::{
     AndroidCheckinProto, AndroidCheckinRequest, AndroidCheckinResponse, BulkDetailsRequest,
@@ -161,6 +166,55 @@ impl Gpapi {
         }
     }
 
+    /// Download a package, given a package ID, optional version code, and filesystem path.
+    ///
+    /// # Arguments
+    ///
+    /// * `pkg_name` - A string type specifying the package's app ID, e.g. `com.instagram.android`
+    /// * `version_code` - An optinal version code, given in i32.  If omitted, the latest version will
+    /// be used
+    /// * `dst_path` - A path to download the file to.
+    pub async fn download<S: Into<String>>(&self, pkg_name: S, version_code: Option<i32>, dst_path: &Path) -> Result<(), Box<dyn Error>> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let pkg_name = pkg_name.into();
+        if dst_path.is_dir() {
+            if let Some(url) = self.get_download_url(pkg_name.clone(), version_code).await? {
+
+                let mut http_async_reader = {
+                    let http_stream = http_stream(&url).await?;
+                    StreamReader::new(http_stream)
+                };
+
+                let mut dest = {
+                    let fname = format!("{}.apk", pkg_name);
+                    let fname = dst_path.join(fname);
+                    tokio::fs::File::create(fname).await?
+                };
+                let mut buf = [0; 8 * 1024];
+                loop {
+                    let num_bytes = http_async_reader.read(&mut buf).await?;
+                    if num_bytes > 0 {
+		        dest.write(&mut buf[0..num_bytes]).await?;
+                    } else {
+                        break;
+                    }
+		}
+                Ok(())
+            } else {
+                Err("Could not download app - no download URL available".into())
+            }
+        } else {
+            Err("Destination path provided is not a valid directory".into())
+        }
+    }
+
+    /// Retrieve the download URL for a package, given a package ID and optional version code.
+    ///
+    /// # Arguments
+    ///
+    /// * `pkg_name` - A string type specifying the package's app ID, e.g. `com.instagram.android`
+    /// * `version_code` - An optinal version code, given in i32.  If omitted, the latest version will
+    /// be used
     pub async fn get_download_url<S: Into<String>>(&self, pkg_name: S, mut version_code: Option<i32>) -> Result<Option<String>, Box<dyn Error>> {
         let pkg_name = pkg_name.into();
         if self.auth_subtoken.is_none() {
@@ -192,7 +246,7 @@ impl Gpapi {
         }
     }
 
-    pub async fn delivery<S: Into<String>>(&self, pkg_name: S, mut version_code: Option<i32>, download_token: S) -> Result<Option<String>, Box<dyn Error>> {
+    async fn delivery<S: Into<String>>(&self, pkg_name: S, mut version_code: Option<i32>, download_token: S) -> Result<Option<String>, Box<dyn Error>> {
         let pkg_name = pkg_name.into();
         let download_token = download_token.into();
         if self.auth_subtoken.is_none() {
@@ -223,6 +277,10 @@ impl Gpapi {
     }
 
     /// Play Store package detail request (provides more detail than bulk requests).
+    ///
+    /// # Arguments
+    ///
+    /// * `pkg_name` - A string type specifying the package's app ID, e.g. `com.instagram.android`
     pub async fn details<S: Into<String>>(&self, pkg_name: S) -> Result<Option<DetailsResponse>, Box<dyn Error>> {
         let pkg_name = pkg_name.into();
         let mut req = HashMap::new();
@@ -235,6 +293,11 @@ impl Gpapi {
         }
     }
 
+    /// Play Store bulk detail request for multiple apps.
+    ///
+    /// # Arguments
+    ///
+    /// * `pkg_names` - An array of string types specifying package app IDs
     pub async fn bulk_details(
         &self,
         pkg_names: &[&str],
@@ -451,6 +514,16 @@ impl Gpapi {
         Ok(res.bytes().await?)
     }
 }
+
+type S = dyn Stream<Item = Result<Bytes, IOError>> + Unpin;
+async fn http_stream(url: &str) -> Result<Box<S>, Box<dyn Error>> {
+    Ok(Box::new(reqwest::get(url)
+        .await?
+        .error_for_status()?
+        .bytes_stream()
+        .map(|result| result.map_err(|e| IOError::new(ErrorKind::Other, e)))))
+}
+
 
 #[derive(Debug)]
 struct PubKey {
