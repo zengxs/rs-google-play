@@ -5,7 +5,7 @@
 [![MIT licensed](https://img.shields.io/crates/l/gpapi.svg)](./LICENSE)
 [![CI](https://github.com/Hainish/rs-google-play/actions/workflows/ci.yml/badge.svg)](https://github.com/Hainish/rs-google-play/actions/workflows/ci.yml)
 
-A library for interacting with the Google Play API, stronly following [google play python API](https://github.com/NoMore201/googleplay-api.git) patterns.
+A library for interacting with the Google Play API, strongly following [google play python API](https://github.com/NoMore201/googleplay-api.git) patterns.
 
 ## Getting Started
 
