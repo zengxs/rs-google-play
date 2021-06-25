@@ -719,15 +719,19 @@ mod tests {
     #[test]
     fn login() {
         let enc = encrypt_login("foo", "bar").unwrap();
-        println!("encrypted: {:?}", base64::encode(&enc));
-        println!("base64_urlsafe: {:?}", base64_urlsafe(&enc));
+        assert!(base64::encode(&enc).starts_with("AFcb4K"));
+        assert_eq!(base64::encode(&enc).len(), 180);
+        assert!(!base64_urlsafe(&enc).contains("/"));
     }
 
     #[test]
     fn parse_form() {
         let form_reply = "FOO=BAR\nbaz=qux";
-        let x = parse_form_reply(&form_reply);
-        println!("form (parsed): {:?}", x);
+        let mut expected_reply = HashMap::new();
+        expected_reply.insert("baz".to_string(), "qux".to_string());
+        expected_reply.insert("foo".to_string(), "BAR".to_string());
+        let parsed_form_reply = parse_form_reply(&form_reply);
+        assert_eq!(expected_reply, parsed_form_reply);
     }
 
     mod gpapi {
@@ -738,6 +742,7 @@ mod tests {
         use googleplay_protobuf::BulkDetailsRequest;
 
         #[tokio::test]
+        #[ignore]
         async fn create_gpapi() {
             match (
                 env::var("GOOGLE_LOGIN"),
@@ -760,9 +765,9 @@ mod tests {
 
         #[test]
         fn test_protobuf() {
-            let mut x = BulkDetailsRequest::new();
-            x.docid = vec!["test".to_string()].into();
-            x.includeChildDocs = Some(true);
+            let mut bdr = BulkDetailsRequest::new();
+            bdr.docid = vec!["test".to_string()].into();
+            bdr.includeChildDocs = Some(true);
         }
     }
 }
