@@ -1,5 +1,10 @@
 # `gpapi` - Google Play API for Rust
 
+[![crates.io](https://img.shields.io/crates/v/gpapi.svg)](https://crates.io/crates/gpapi)
+[![Documentation](https://docs.rs/gpapi/badge.svg)](https://docs.rs/gpapi)
+[![MIT licensed](https://img.shields.io/crates/l/gpapi.svg)](./LICENSE)
+[![CI](https://github.com/Hainish/rs-google-play/actions/workflows/rust.yml/badge.svg)](https://github.com/Hainish/rs-google-play/actions/workflows/rust.yml)
+
 A library for interacting with the Google Play API, stronly following [google play python API](https://github.com/NoMore201/googleplay-api.git) patterns.
 
 ## Getting Started
