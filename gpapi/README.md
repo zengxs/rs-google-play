@@ -12,17 +12,23 @@ A library for interacting with the Google Play API, strongly following [google p
 Interacting with the API starts off with initializing the API and logging in.
 
 ```rust
-let mut gpa = Gpapi::new("en_US", "UTC", "hero2lte");
-gpa.login("someone@gmail.com", "somepass").await);
+use gpapi::Gpapi;
+
+#[tokio::main]
+async fn main() {
+    let mut gpa = Gpapi::new("en_US", "UTC", "hero2lte");
+    gpa.login("someone@gmail.com", "somepass").await;
+    // do something
+}
 ```
 
 From here, you can get package details, get the URL to download a package, or use the library to download it.
 
 ```rust
-let details = gpa.details("com.instagram.android");
+let details = gpa.details("com.instagram.android").await;
 println!("{:?}", details);
 
-let download_url = gpa.get_download_url("com.instagram.android", None);
+let download_url = gpa.get_download_url("com.instagram.android", None).await;
 println!("{:?}", download_url);
 
 gpa.download("com.instagram.android", None, &Path::new("/tmp/testing")).await;
