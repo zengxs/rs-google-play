@@ -35,6 +35,7 @@
 //! ```
 
 mod consts;
+pub mod error;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -54,6 +55,8 @@ use protobuf::{Message, SingularField, SingularPtrField};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Url;
 use tokio_util::io::StreamReader;
+
+use crate::error::FileExistsError;
 
 use googleplay_protobuf::{
     AndroidCheckinProto, AndroidCheckinRequest, AndroidCheckinResponse, BulkDetailsRequest,
@@ -210,9 +213,20 @@ impl Gpapi {
     /// * `version_code` - An optinal version code, given in i32.  If omitted, the latest version will
     /// be used
     /// * `dst_path` - A path to download the file to.
+    ///
+    /// # Errors
+    ///
+    /// If the file already exists for this download, an Err([`FileExistsError`]) result is returned.
     pub async fn download<S: Into<String>>(&self, pkg_name: S, version_code: Option<i32>, dst_path: &Path) -> Result<(), Box<dyn Error>> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let pkg_name = pkg_name.into();
+        let fname = format!("{}.apk", pkg_name);
+        let fname = dst_path.join(fname);
+
+        if fname.is_file() {
+            return Err(Box::new(FileExistsError));
+        }
+
         if dst_path.is_dir() {
             if let Some(url) = self.get_download_url(pkg_name.clone(), version_code).await? {
 
@@ -222,8 +236,6 @@ impl Gpapi {
                 };
 
                 let mut dest = {
-                    let fname = format!("{}.apk", pkg_name);
-                    let fname = dst_path.join(fname);
                     tokio::fs::File::create(fname).await?
                 };
                 let mut buf = [0; 8 * 1024];
@@ -264,7 +276,7 @@ impl Gpapi {
             }
         }
         let resp = {
-            let version_code_str = version_code.unwrap().to_string();
+            let version_code_str = version_code.ok_or("Version code not found, could not get download URL")?.to_string();
             let mut req = HashMap::new();
             req.insert("ot", "1");
             req.insert("doc", &pkg_name);
