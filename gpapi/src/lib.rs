@@ -269,14 +269,10 @@ impl Gpapi {
             return Err("Logging in is required for this action".into());
         }
         if version_code.is_none() {
-            if let Some(details) = self.details(&pkg_name).await? {
-                version_code = details.docV2.unwrap().details.unwrap().appDetails.unwrap().versionCode;
-            } else {
-                return Err(format!("Cannot get details for {}", pkg_name).into());
-            }
+            version_code = Some(self.get_latest_version_for_pkg_name(&pkg_name).await?);
         }
         let resp = {
-            let version_code_str = version_code.ok_or("Version code not found, could not get download URL")?.to_string();
+            let version_code_str = version_code.unwrap().to_string();
             let mut req = HashMap::new();
             req.insert("ot", "1");
             req.insert("doc", &pkg_name);
@@ -284,14 +280,13 @@ impl Gpapi {
             self.execute_request_v2("purchase", Some(req), None, HeaderMap::new()).await?
         };
         if let Some(payload) = resp.payload.into_option() {
-            if let Some(download_token) = payload.buyResponse.unwrap().downloadToken.into_option() {
-                self.delivery(&pkg_name, version_code.clone(), &download_token).await
-            } else {
-                Err("App not purchased".into())
+            if let Some(buy_response) = payload.buyResponse.into_option() {
+                if let Some(download_token) = buy_response.downloadToken.into_option() {
+                    return self.delivery(&pkg_name, version_code.clone(), &download_token).await;
+                }
             }
-        } else {
-            Err("No valid response from server".into())
         }
+        Err(GpapiError::new(GpapiErrorKind::InvalidApp))
     }
 
     async fn delivery<S: Into<String>>(&self, pkg_name: S, mut version_code: Option<i32>, download_token: S) -> Result<Option<String>, GpapiError> {
@@ -301,11 +296,7 @@ impl Gpapi {
             return Err("Logging in is required for this action".into());
         }
         if version_code.is_none() {
-            if let Some(details) = self.details(&pkg_name).await? {
-                version_code = details.docV2.unwrap().details.unwrap().appDetails.unwrap().versionCode;
-            } else {
-                return Err(format!("Cannot get details for {}", pkg_name).into());
-            }
+            version_code = Some(self.get_latest_version_for_pkg_name(&pkg_name).await?);
         }
         let resp = {
             let version_code_str = version_code.unwrap().to_string();
@@ -317,11 +308,13 @@ impl Gpapi {
             self.execute_request_v2("delivery", Some(req), None, HeaderMap::new()).await?
         };
         if let Some(payload) = resp.payload.into_option() {
-            Ok(payload.deliveryResponse.unwrap().appDeliveryData.unwrap().downloadUrl.into_option())
-        } else {
-            Err("No valid response from server".into())
+            if let Some(delivery_response) = payload.deliveryResponse.into_option() {
+                if let Some(app_delivery_data) = delivery_response.appDeliveryData.into_option() {
+                    return Ok(app_delivery_data.downloadUrl.into_option());
+                }
+            }
         }
-
+        Err(GpapiError::new(GpapiErrorKind::InvalidApp))
     }
 
     /// Play Store package detail request (provides more detail than bulk requests).
@@ -339,6 +332,21 @@ impl Gpapi {
         } else {
             Ok(None)
         }
+    }
+
+    async fn get_latest_version_for_pkg_name(&self, pkg_name: &str) -> Result<i32, GpapiError> {
+        if let Some(details) = self.details(pkg_name).await? {
+            if let Some(doc_v2) = details.docV2.into_option() {
+                if let Some(details) = doc_v2.details.into_option() {
+                    if let Some(app_details) = details.appDetails.into_option() {
+                        if let Some(version_code) = app_details.versionCode {
+                            return Ok(version_code);
+                        }
+                    }
+                }
+            }
+        }
+        Err(GpapiError::new(GpapiErrorKind::InvalidApp))
     }
 
     /// Play Store bulk detail request for multiple apps.

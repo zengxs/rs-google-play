@@ -7,6 +7,7 @@ use protobuf::error::ProtobufError;
 #[derive(Debug)]
 pub enum ErrorKind {
     FileExists,
+    InvalidApp,
     IO(IOError),
     Str(String),
     Protobuf(ProtobufError),
@@ -72,13 +73,17 @@ impl From<ProtobufError> for Error {
     }
 }
 
-
-
-
 impl StdError for Error {}
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "File already exists")
+        match self.kind() {
+            ErrorKind::FileExists => write!(f, "File already exists"),
+            ErrorKind::InvalidApp => write!(f, "Invalid app response"),
+            ErrorKind::IO(err) => err.fmt(f),
+            ErrorKind::Str(err) => err.fmt(f),
+            ErrorKind::Protobuf(err) => err.fmt(f),
+            ErrorKind::Other(err) => err.fmt(f),
+        }
     }
 }
