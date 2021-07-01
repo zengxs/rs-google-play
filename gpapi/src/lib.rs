@@ -56,7 +56,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Url;
 use tokio_util::io::StreamReader;
 
-use crate::error::FileExistsError;
+use crate::error::{Error as GpapiError, ErrorKind as GpapiErrorKind};
 
 use googleplay_protobuf::{
     AndroidCheckinProto, AndroidCheckinRequest, AndroidCheckinResponse, BulkDetailsRequest,
@@ -127,7 +127,7 @@ impl Gpapi {
     /// * `username` - A string type specifying the login username, usually a full email
     /// * `password` - A string type specifying an app password, created from your Google account
     /// settings.
-    pub async fn login<S: Into<String> + Clone>(&mut self, username: S, password: S) -> Result<(), Box<dyn Error>> {
+    pub async fn login<S: Into<String> + Clone>(&mut self, username: S, password: S) -> Result<(), GpapiError> {
         let username = username.into();
         let login = encrypt_login(&username, &password.into()).unwrap();
         let encrypted_password = base64_urlsafe(&login);
@@ -217,14 +217,14 @@ impl Gpapi {
     /// # Errors
     ///
     /// If the file already exists for this download, an Err([`FileExistsError`]) result is returned.
-    pub async fn download<S: Into<String>>(&self, pkg_name: S, version_code: Option<i32>, dst_path: &Path) -> Result<(), Box<dyn Error>> {
+    pub async fn download<S: Into<String>>(&self, pkg_name: S, version_code: Option<i32>, dst_path: &Path) -> Result<(), GpapiError> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let pkg_name = pkg_name.into();
         let fname = format!("{}.apk", pkg_name);
         let fname = dst_path.join(fname);
 
         if fname.is_file() {
-            return Err(Box::new(FileExistsError));
+            return Err(GpapiError::new(GpapiErrorKind::FileExists));
         }
 
         if dst_path.is_dir() {
@@ -263,7 +263,7 @@ impl Gpapi {
     /// * `pkg_name` - A string type specifying the package's app ID, e.g. `com.instagram.android`
     /// * `version_code` - An optinal version code, given in i32.  If omitted, the latest version will
     /// be used
-    pub async fn get_download_url<S: Into<String>>(&self, pkg_name: S, mut version_code: Option<i32>) -> Result<Option<String>, Box<dyn Error>> {
+    pub async fn get_download_url<S: Into<String>>(&self, pkg_name: S, mut version_code: Option<i32>) -> Result<Option<String>, GpapiError> {
         let pkg_name = pkg_name.into();
         if self.auth_subtoken.is_none() {
             return Err("Logging in is required for this action".into());
@@ -294,7 +294,7 @@ impl Gpapi {
         }
     }
 
-    async fn delivery<S: Into<String>>(&self, pkg_name: S, mut version_code: Option<i32>, download_token: S) -> Result<Option<String>, Box<dyn Error>> {
+    async fn delivery<S: Into<String>>(&self, pkg_name: S, mut version_code: Option<i32>, download_token: S) -> Result<Option<String>, GpapiError> {
         let pkg_name = pkg_name.into();
         let download_token = download_token.into();
         if self.auth_subtoken.is_none() {
@@ -329,7 +329,7 @@ impl Gpapi {
     /// # Arguments
     ///
     /// * `pkg_name` - A string type specifying the package's app ID, e.g. `com.instagram.android`
-    pub async fn details<S: Into<String>>(&self, pkg_name: S) -> Result<Option<DetailsResponse>, Box<dyn Error>> {
+    pub async fn details<S: Into<String>>(&self, pkg_name: S) -> Result<Option<DetailsResponse>, GpapiError> {
         let pkg_name = pkg_name.into();
         let mut req = HashMap::new();
         req.insert("doc", &pkg_name[..]);
@@ -349,7 +349,7 @@ impl Gpapi {
     pub async fn bulk_details(
         &self,
         pkg_names: &[&str],
-    ) -> Result<Option<BulkDetailsResponse>, Box<dyn Error>> {
+    ) -> Result<Option<BulkDetailsResponse>, GpapiError> {
         let mut req = BulkDetailsRequest::new();
         req.docid = pkg_names.into_iter().cloned().map(String::from).collect();
         req.includeChildDocs = Some(false);
