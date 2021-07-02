@@ -1,3 +1,4 @@
+<!--- `README.md` is automatically generated from the rustdoc using [`cargo-readme`](https://crates.io/crates/cargo-readme). -->
 # `gpapi` - Google Play API for Rust
 
 [![crates.io](https://img.shields.io/crates/v/gpapi.svg)](https://crates.io/crates/gpapi)
@@ -9,7 +10,7 @@
 
 ## Docs
 
-`README.md` is automatically generated from the rustdoc using [`cargo-readme`](https://crates.io/crates/cargo-readme).
+Documentation for this crate can be found on [docs.rs](https://docs.rs/gpapi/).
 
 ## Todo
 

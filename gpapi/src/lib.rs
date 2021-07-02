@@ -216,7 +216,10 @@ impl Gpapi {
     ///
     /// # Errors
     ///
-    /// If the file already exists for this download, an Err([`FileExistsError`]) result is returned.
+    /// If the file already exists for this download, an Err([`Error`]) result is returned with an
+    /// [`ErrorKind`] of FileExists.
+    /// If the specified directory is misssing, an Err([`Error`]) result is returned with an
+    /// [`ErrorKind`] of DirectoryMissing.
     pub async fn download<S: Into<String>>(&self, pkg_name: S, version_code: Option<i32>, dst_path: &Path) -> Result<(), GpapiError> {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let pkg_name = pkg_name.into();
