@@ -252,7 +252,7 @@ impl Gpapi {
                 Err("Could not download app - no download URL available".into())
             }
         } else {
-            Err("Destination path provided is not a valid directory".into())
+            Err(GpapiError::new(GpapiErrorKind::DirectoryMissing))
         }
     }
 

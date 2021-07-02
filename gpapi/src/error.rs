@@ -7,6 +7,7 @@ use protobuf::error::ProtobufError;
 #[derive(Debug)]
 pub enum ErrorKind {
     FileExists,
+    DirectoryMissing,
     InvalidApp,
     IO(IOError),
     Str(String),
@@ -80,6 +81,7 @@ impl fmt::Display for Error {
         match self.kind() {
             ErrorKind::FileExists => write!(f, "File already exists"),
             ErrorKind::InvalidApp => write!(f, "Invalid app response"),
+            ErrorKind::DirectoryMissing => write!(f, "Destination path provided is not a valid directory"),
             ErrorKind::IO(err) => err.fmt(f),
             ErrorKind::Str(err) => err.fmt(f),
             ErrorKind::Protobuf(err) => err.fmt(f),
