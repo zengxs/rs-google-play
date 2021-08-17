@@ -39,13 +39,10 @@ pub mod error;
 
 use std::collections::HashMap;
 use std::error::Error;
-use std::io::{Error as IOError, ErrorKind};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
-use futures_util::stream::Stream;
-use futures_util::StreamExt;
 use hyper_openssl::HttpsConnector;
 use hyper::client::HttpConnector;
 use hyper::{Body, Client, Method, Request};
@@ -54,7 +51,6 @@ use openssl::ssl::{SslConnector, SslMethod};
 use protobuf::{Message, SingularField, SingularPtrField};
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Url;
-use tokio_util::io::StreamReader;
 
 use crate::error::{Error as GpapiError, ErrorKind as GpapiErrorKind};
 
@@ -221,41 +217,16 @@ impl Gpapi {
     /// If the specified directory is misssing, an Err([`Error`]) result is returned with an
     /// [`ErrorKind`] of DirectoryMissing.
     pub async fn download<S: Into<String>>(&self, pkg_name: S, version_code: Option<i32>, dst_path: &Path) -> Result<(), GpapiError> {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let pkg_name = pkg_name.into();
         let fname = format!("{}.apk", pkg_name);
-        let fname = dst_path.join(fname);
 
-        if fname.is_file() {
-            return Err(GpapiError::new(GpapiErrorKind::FileExists));
-        }
-
-        if dst_path.is_dir() {
-            if let Some(url) = self.get_download_url(pkg_name.clone(), version_code).await? {
-
-                let mut http_async_reader = {
-                    let http_stream = http_stream(&url).await?;
-                    StreamReader::new(http_stream)
-                };
-
-                let mut dest = {
-                    tokio::fs::File::create(fname).await?
-                };
-                let mut buf = [0; 8 * 1024];
-                loop {
-                    let num_bytes = http_async_reader.read(&mut buf).await?;
-                    if num_bytes > 0 {
-		        dest.write(&mut buf[0..num_bytes]).await?;
-                    } else {
-                        break;
-                    }
-		}
-                Ok(())
-            } else {
-                Err("Could not download app - no download URL available".into())
+        if let Some(download_url) = self.get_download_url(pkg_name.clone(), version_code).await? {
+            match tokio_dl_stream_to_disk::download(download_url, dst_path, fname).await {
+                Ok(()) => Ok(()),
+                Err(err) => Err(err.into()),
             }
         } else {
-            Err(GpapiError::new(GpapiErrorKind::DirectoryMissing))
+            Err("Could not download app - no download URL available".into())
         }
     }
 
@@ -573,16 +544,6 @@ impl Gpapi {
         Ok(res.bytes().await?)
     }
 }
-
-type S = dyn Stream<Item = Result<Bytes, IOError>> + Unpin;
-async fn http_stream(url: &str) -> Result<Box<S>, Box<dyn Error>> {
-    Ok(Box::new(reqwest::get(url)
-        .await?
-        .error_for_status()?
-        .bytes_stream()
-        .map(|result| result.map_err(|e| IOError::new(ErrorKind::Other, e)))))
-}
-
 
 #[derive(Debug)]
 struct PubKey {

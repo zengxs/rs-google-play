@@ -3,6 +3,8 @@ use std::io::Error as IOError;
 use std::fmt;
 
 use protobuf::error::ProtobufError;
+use tokio_dl_stream_to_disk::error::Error as TDSTDError;
+use tokio_dl_stream_to_disk::error::ErrorKind as TDSTDErrorKind;
 
 #[derive(Debug)]
 pub enum ErrorKind {
@@ -45,6 +47,27 @@ impl From<Box<dyn StdError>> for Error {
         Error {
             kind: ErrorKind::Other(err),
 	}
+    }
+}
+
+impl From<TDSTDError> for Error {
+    fn from(err: TDSTDError) -> Error {
+        match err.kind() {
+            TDSTDErrorKind::FileExists => {
+                Error { kind: ErrorKind::FileExists }
+            },
+            TDSTDErrorKind::DirectoryMissing => {
+                Error { kind: ErrorKind::DirectoryMissing }
+            },
+            TDSTDErrorKind::IO(_) => {
+                let err = err.into_inner_io().unwrap();
+                Error { kind: ErrorKind::IO(err) }
+            },
+            TDSTDErrorKind::Other(_) => {
+                let err = err.into_inner_other().unwrap();
+                Error { kind: ErrorKind::Other(err) }
+            }
+        }
     }
 }
 
