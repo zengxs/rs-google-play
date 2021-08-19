@@ -469,6 +469,9 @@ impl Gpapi {
             reqwest::header::USER_AGENT,
             HeaderValue::from_str(&config.user_agent())?);
         headers.insert(
+            reqwest::header::CONTENT_TYPE,
+            HeaderValue::from_static("application/x-protobuf"));
+        headers.insert(
             "X-DFE-Encoded-Targets",
             HeaderValue::from_static(consts::defaults::DEFAULT_DFE_TARGETS));
         headers.insert(
