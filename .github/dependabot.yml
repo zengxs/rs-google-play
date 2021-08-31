@@ -10,7 +10,7 @@ updates:
     assignees:
       - "hainish"
     commit-message:
-      prefix: "cargo-update-googleplay-protobuf"
+      prefix: "cargo-update"
     labels:
       - "dependencies"
     pull-request-branch-name:
@@ -27,7 +27,7 @@ updates:
     assignees:
       - "hainish"
     commit-message:
-      prefix: "cargo-update-gpapi"
+      prefix: "cargo-update"
     labels:
       - "dependencies"
     pull-request-branch-name:
