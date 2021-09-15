@@ -43,10 +43,10 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
-use hyper_openssl::HttpsConnector;
 use hyper::client::HttpConnector;
+use hyper::header::{HeaderName as HyperHeaderName, HeaderValue as HyperHeaderValue};
 use hyper::{Body, Client, Method, Request};
-use hyper::header::{HeaderValue as HyperHeaderValue, HeaderName as HyperHeaderName};
+use hyper_openssl::HttpsConnector;
 use openssl::ssl::{SslConnector, SslMethod};
 use protobuf::{Message, SingularField, SingularPtrField};
 use reqwest::header::{HeaderMap, HeaderValue};
@@ -66,8 +66,10 @@ extern crate lazy_static;
 static DEVICES_ENCODED: &[u8] = include_bytes!("device_properties.bin");
 static CHECKINS_ENCODED: &[u8] = include_bytes!("android_checkins.bin");
 lazy_static! {
-    static ref DEVICE_CONFIGURATIONS: HashMap<String, DeviceConfigurationProto> = bincode::deserialize(DEVICES_ENCODED).unwrap();
-    static ref ANDROID_CHECKINS: HashMap<String, AndroidCheckinProto> = bincode::deserialize(CHECKINS_ENCODED).unwrap();
+    static ref DEVICE_CONFIGURATIONS: HashMap<String, DeviceConfigurationProto> =
+        bincode::deserialize(DEVICES_ENCODED).unwrap();
+    static ref ANDROID_CHECKINS: HashMap<String, AndroidCheckinProto> =
+        bincode::deserialize(CHECKINS_ENCODED).unwrap();
 }
 
 /// The Gpapi object is the sole way to interact with the Play Store API.  It abstracts the logic
@@ -98,7 +100,9 @@ impl Gpapi {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
         let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
-        connector.set_cipher_list(consts::GOOGLE_ACCEPTED_CIPHERS).unwrap();
+        connector
+            .set_cipher_list(consts::GOOGLE_ACCEPTED_CIPHERS)
+            .unwrap();
         let https = HttpsConnector::with_connector(http, connector).unwrap();
         let hyper_client = Client::builder().build::<_, hyper::Body>(https);
 
@@ -123,7 +127,11 @@ impl Gpapi {
     /// * `username` - A string type specifying the login username, usually a full email
     /// * `password` - A string type specifying an app password, created from your Google account
     /// settings.
-    pub async fn login<S: Into<String> + Clone>(&mut self, username: S, password: S) -> Result<(), GpapiError> {
+    pub async fn login<S: Into<String> + Clone>(
+        &mut self,
+        username: S,
+        password: S,
+    ) -> Result<(), GpapiError> {
         let username = username.into();
         let login = encrypt_login(&username, &password.into()).unwrap();
         let encrypted_password = base64_urlsafe(&login);
@@ -136,9 +144,11 @@ impl Gpapi {
         if let Some(token) = form.get("auth") {
             let token = token.to_string();
             self.gsf_id = self.checkin(&username, &token).await?;
-            self.get_auth_subtoken(&username, &encrypted_password).await?;
+            self.get_auth_subtoken(&username, &encrypted_password)
+                .await?;
             if let Some(upload_device_config_token) = self.upload_device_config().await? {
-                self.device_config_token = Some(upload_device_config_token.uploadDeviceConfigToken.unwrap());
+                self.device_config_token =
+                    Some(upload_device_config_token.uploadDeviceConfigToken.unwrap());
                 Ok(())
             } else {
                 Err("No device config token".into())
@@ -148,12 +158,25 @@ impl Gpapi {
         }
     }
 
-    async fn checkin(&mut self, username: &str, ac2dm_token: &str) -> Result<Option<i64>, Box<dyn Error>> {
-        let mut checkin = ANDROID_CHECKINS.get(&self.device_codename).map(|c| c.clone())
+    async fn checkin(
+        &mut self,
+        username: &str,
+        ac2dm_token: &str,
+    ) -> Result<Option<i64>, Box<dyn Error>> {
+        let mut checkin = ANDROID_CHECKINS
+            .get(&self.device_codename)
+            .map(|c| c.clone())
             .expect("Invalid device codename");
 
-        checkin.build.as_mut().map(|mut b| b.timestamp = Some(
-            (SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() / 1000) as i64));
+        checkin.build.as_mut().map(|mut b| {
+            b.timestamp = Some(
+                (SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+                    / 1000) as i64,
+            )
+        });
 
         let mut req = AndroidCheckinRequest::new();
         req.id = Some(0);
@@ -161,7 +184,11 @@ impl Gpapi {
         req.locale = SingularField::from(Some(self.locale.clone()));
         req.timeZone = SingularField::from(Some(self.timezone.clone()));
         req.version = Some(3);
-        req.deviceConfiguration = SingularPtrField::from(DEVICE_CONFIGURATIONS.get(&self.device_codename).map(|c| c.clone()));
+        req.deviceConfiguration = SingularPtrField::from(
+            DEVICE_CONFIGURATIONS
+                .get(&self.device_codename)
+                .map(|c| c.clone()),
+        );
         req.fragment = Some(0);
         let mut req_followup = req.clone();
         let bytes = req.write_to_bytes()?;
@@ -178,27 +205,34 @@ impl Gpapi {
         Ok(resp.androidId.map(|id| id as i64))
     }
 
-    async fn upload_device_config(&self) -> Result<Option<UploadDeviceConfigResponse>, Box<dyn Error>> {
+    async fn upload_device_config(
+        &self,
+    ) -> Result<Option<UploadDeviceConfigResponse>, Box<dyn Error>> {
         let mut req = UploadDeviceConfigRequest::new();
-        req.deviceConfiguration = SingularPtrField::from(DEVICE_CONFIGURATIONS.get(&self.device_codename).map(|c| c.clone()));
+        req.deviceConfiguration = SingularPtrField::from(
+            DEVICE_CONFIGURATIONS
+                .get(&self.device_codename)
+                .map(|c| c.clone()),
+        );
         //let headers = self.get_headers();
         let bytes = req.write_to_bytes()?;
 
         let mut headers = HeaderMap::new();
         headers.insert(
             "X-DFE-Enabled-Experiments",
-            HeaderValue::from_static("cl:billing.select_add_instrument_by_default"));
+            HeaderValue::from_static("cl:billing.select_add_instrument_by_default"),
+        );
         headers.insert(
             "X-DFE-Unsupported-Experiments",
             HeaderValue::from_static("nocache:billing.use_charging_poller,market_emails,buyer_currency,prod_baseline,checkin.set_asset_paid_app_field,shekel_test,content_ratings,buyer_currency_in_app,nocache:encrypted_apk,recent_changes"));
         headers.insert(
             "X-DFE-SmallestScreenWidthDp",
-            HeaderValue::from_static("320"));
-        headers.insert(
-            "X-DFE-Filter-Level",
-            HeaderValue::from_static("3"));
-        let resp = self.execute_request_v2(
-            "uploadDeviceConfig", None, Some(&bytes), headers).await?;
+            HeaderValue::from_static("320"),
+        );
+        headers.insert("X-DFE-Filter-Level", HeaderValue::from_static("3"));
+        let resp = self
+            .execute_request_v2("uploadDeviceConfig", None, Some(&bytes), headers)
+            .await?;
         if let Some(payload) = resp.payload.into_option() {
             Ok(payload.uploadDeviceConfigResponse.into_option())
         } else {
@@ -221,11 +255,19 @@ impl Gpapi {
     /// [`ErrorKind`] of FileExists.
     /// If the specified directory is misssing, an Err([`Error`]) result is returned with an
     /// [`ErrorKind`] of DirectoryMissing.
-    pub async fn download<S: Into<String>>(&self, pkg_name: S, version_code: Option<i32>, dst_path: &Path) -> Result<(), GpapiError> {
+    pub async fn download<S: Into<String>>(
+        &self,
+        pkg_name: S,
+        version_code: Option<i32>,
+        dst_path: &Path,
+    ) -> Result<(), GpapiError> {
         let pkg_name = pkg_name.into();
         let fname = format!("{}.apk", pkg_name);
 
-        if let Some(download_url) = self.get_download_url(pkg_name.clone(), version_code).await? {
+        if let Some(download_url) = self
+            .get_download_url(pkg_name.clone(), version_code)
+            .await?
+        {
             match tokio_dl_stream_to_disk::download(download_url, dst_path, fname).await {
                 Ok(()) => Ok(()),
                 Err(err) => Err(err.into()),
@@ -242,7 +284,11 @@ impl Gpapi {
     /// * `pkg_name` - A string type specifying the package's app ID, e.g. `com.instagram.android`
     /// * `version_code` - An optinal version code, given in i32.  If omitted, the latest version will
     /// be used
-    pub async fn get_download_url<S: Into<String>>(&self, pkg_name: S, mut version_code: Option<i32>) -> Result<Option<String>, GpapiError> {
+    pub async fn get_download_url<S: Into<String>>(
+        &self,
+        pkg_name: S,
+        mut version_code: Option<i32>,
+    ) -> Result<Option<String>, GpapiError> {
         let pkg_name = pkg_name.into();
         if self.auth_subtoken.is_none() {
             return Err("Logging in is required for this action".into());
@@ -256,19 +302,27 @@ impl Gpapi {
             req.insert("ot", "1");
             req.insert("doc", &pkg_name);
             req.insert("vc", &version_code_str);
-            self.execute_request_v2("purchase", Some(req), None, HeaderMap::new()).await?
+            self.execute_request_v2("purchase", Some(req), None, HeaderMap::new())
+                .await?
         };
         if let Some(payload) = resp.payload.into_option() {
             if let Some(buy_response) = payload.buyResponse.into_option() {
                 if let Some(download_token) = buy_response.downloadToken.into_option() {
-                    return self.delivery(&pkg_name, version_code.clone(), &download_token).await;
+                    return self
+                        .delivery(&pkg_name, version_code.clone(), &download_token)
+                        .await;
                 }
             }
         }
         Err(GpapiError::new(GpapiErrorKind::InvalidApp))
     }
 
-    async fn delivery<S: Into<String>>(&self, pkg_name: S, mut version_code: Option<i32>, download_token: S) -> Result<Option<String>, GpapiError> {
+    async fn delivery<S: Into<String>>(
+        &self,
+        pkg_name: S,
+        mut version_code: Option<i32>,
+        download_token: S,
+    ) -> Result<Option<String>, GpapiError> {
         let pkg_name = pkg_name.into();
         let download_token = download_token.into();
         if self.auth_subtoken.is_none() {
@@ -284,7 +338,8 @@ impl Gpapi {
             req.insert("doc", &pkg_name);
             req.insert("vc", &version_code_str);
             req.insert("dtok", &download_token);
-            self.execute_request_v2("delivery", Some(req), None, HeaderMap::new()).await?
+            self.execute_request_v2("delivery", Some(req), None, HeaderMap::new())
+                .await?
         };
         if let Some(payload) = resp.payload.into_option() {
             if let Some(delivery_response) = payload.deliveryResponse.into_option() {
@@ -301,11 +356,16 @@ impl Gpapi {
     /// # Arguments
     ///
     /// * `pkg_name` - A string type specifying the package's app ID, e.g. `com.instagram.android`
-    pub async fn details<S: Into<String>>(&self, pkg_name: S) -> Result<Option<DetailsResponse>, GpapiError> {
+    pub async fn details<S: Into<String>>(
+        &self,
+        pkg_name: S,
+    ) -> Result<Option<DetailsResponse>, GpapiError> {
         let pkg_name = pkg_name.into();
         let mut req = HashMap::new();
         req.insert("doc", &pkg_name[..]);
-        let resp = self.execute_request_v2("details", Some(req), None, HeaderMap::new()).await?;
+        let resp = self
+            .execute_request_v2("details", Some(req), None, HeaderMap::new())
+            .await?;
         if let Some(payload) = resp.payload.into_option() {
             Ok(payload.detailsResponse.into_option())
         } else {
@@ -341,12 +401,9 @@ impl Gpapi {
         req.docid = pkg_names.into_iter().cloned().map(String::from).collect();
         req.includeChildDocs = Some(false);
         let bytes = req.write_to_bytes()?;
-        let resp = self.execute_request_v2(
-            "bulkDetails",
-            None,
-            Some(&bytes),
-            HeaderMap::new(),
-        ).await?;
+        let resp = self
+            .execute_request_v2("bulkDetails", None, Some(&bytes), HeaderMap::new())
+            .await?;
         if let Some(payload) = resp.payload.into_option() {
             Ok(payload.bulkDetailsResponse.into_option())
         } else {
@@ -354,28 +411,56 @@ impl Gpapi {
         }
     }
 
-    async fn get_auth_subtoken(&mut self, username: &str, encrypted_password: &str) -> Result<(), Box<dyn Error>> {
+    async fn get_auth_subtoken(
+        &mut self,
+        username: &str,
+        encrypted_password: &str,
+    ) -> Result<(), Box<dyn Error>> {
         let mut login_req = build_login_request(username, encrypted_password);
-        login_req.params.insert(String::from("service"), String::from("androidmarket"));
-        login_req.params.insert(String::from("app"), String::from("com.android.vending"));
+        login_req
+            .params
+            .insert(String::from("service"), String::from("androidmarket"));
+        login_req
+            .params
+            .insert(String::from("app"), String::from("com.android.vending"));
         let second_login_req = login_req.clone();
 
         let reply = self.authenticate_helper(&login_req).await?;
         if let Some(master_token) = reply.get("token") {
-            self.auth_subtoken = self.get_second_round_token(master_token, second_login_req).await?;
+            self.auth_subtoken = self
+                .get_second_round_token(master_token, second_login_req)
+                .await?;
         }
         Ok(())
     }
 
-    async fn get_second_round_token(&self, master_token: &str, mut login_req: LoginRequest) -> Result<Option<String>, Box<dyn Error>> {
+    async fn get_second_round_token(
+        &self,
+        master_token: &str,
+        mut login_req: LoginRequest,
+    ) -> Result<Option<String>, Box<dyn Error>> {
         if let Some(gsf_id) = self.gsf_id {
-            login_req.params.insert(String::from("androidId"), format!("{:x}", gsf_id));
+            login_req
+                .params
+                .insert(String::from("androidId"), format!("{:x}", gsf_id));
         }
-        login_req.params.insert(String::from("Token"), String::from(master_token));
-        login_req.params.insert(String::from("check_email"), String::from("1"));
-        login_req.params.insert(String::from("token_request_options"), String::from("CAA4AQ=="));
-        login_req.params.insert(String::from("system_partition"), String::from("1"));
-        login_req.params.insert(String::from("_opt_is_called_from_account_manager"), String::from("1"));
+        login_req
+            .params
+            .insert(String::from("Token"), String::from(master_token));
+        login_req
+            .params
+            .insert(String::from("check_email"), String::from("1"));
+        login_req.params.insert(
+            String::from("token_request_options"),
+            String::from("CAA4AQ=="),
+        );
+        login_req
+            .params
+            .insert(String::from("system_partition"), String::from("1"));
+        login_req.params.insert(
+            String::from("_opt_is_called_from_account_manager"),
+            String::from("1"),
+        );
         login_req.params.remove("Email");
         login_req.params.remove("EncryptedPasswd");
         let reply = self.authenticate_helper(&login_req).await?;
@@ -384,38 +469,50 @@ impl Gpapi {
 
     /// Handles authenticating with Google Play Store, retrieving a set of tokens from
     /// the server that can be used for future requests.
-    async fn authenticate(&self, username: &str, encrypted_password: &str) -> Result<HashMap<String, String>, Box<dyn Error>> {
+    async fn authenticate(
+        &self,
+        username: &str,
+        encrypted_password: &str,
+    ) -> Result<HashMap<String, String>, Box<dyn Error>> {
         let login_req = build_login_request(username, encrypted_password);
 
         self.authenticate_helper(&login_req).await
     }
 
-    async fn authenticate_helper(&self, login_req: &LoginRequest) -> Result<HashMap<String, String>, Box<dyn Error>> {
+    async fn authenticate_helper(
+        &self,
+        login_req: &LoginRequest,
+    ) -> Result<HashMap<String, String>, Box<dyn Error>> {
         let form_body = login_req.form_post();
 
         let mut req = Request::builder()
             .method(Method::POST)
             .uri(format!("{}/{}", consts::defaults::DEFAULT_BASE_URL, "auth"))
-            .body(Body::from(form_body)).unwrap();
+            .body(Body::from(form_body))
+            .unwrap();
         let headers = req.headers_mut();
         headers.insert(
             hyper::header::USER_AGENT,
-            HyperHeaderValue::from_str(&consts::defaults::DEFAULT_AUTH_USER_AGENT)?);
+            HyperHeaderValue::from_str(&consts::defaults::DEFAULT_AUTH_USER_AGENT)?,
+        );
         headers.insert(
             hyper::header::CONTENT_TYPE,
-            HyperHeaderValue::from_static("application/x-www-form-urlencoded; charset=UTF-8"));
+            HyperHeaderValue::from_static("application/x-www-form-urlencoded; charset=UTF-8"),
+        );
         if let Some(gsf_id) = &self.gsf_id {
             headers.insert(
                 HyperHeaderName::from_static("device"),
-                HyperHeaderValue::from_str(&format!("{:x}", gsf_id))?);
+                HyperHeaderValue::from_str(&format!("{:x}", gsf_id))?,
+            );
             headers.insert(
                 HyperHeaderName::from_static("app"),
-                HyperHeaderValue::from_static("com.android.vending"));
+                HyperHeaderValue::from_static("com.android.vending"),
+            );
         }
 
         let res = self.hyper_client.request(req).await?;
 
-	let body_bytes = hyper::body::to_bytes(res.into_body()).await?;
+        let body_bytes = hyper::body::to_bytes(res.into_body()).await?;
         let reply = parse_form_reply(&std::str::from_utf8(&body_bytes.to_vec()).unwrap());
         Ok(reply)
     }
@@ -430,14 +527,21 @@ impl Gpapi {
         msg: Option<&[u8]>,
         headers: HeaderMap,
     ) -> Result<ResponseWrapper, Box<dyn Error>> {
-        let bytes = self.execute_request_helper(endpoint, query, msg, headers, true).await?;
+        let bytes = self
+            .execute_request_helper(endpoint, query, msg, headers, true)
+            .await?;
         let mut resp = ResponseWrapper::new();
         resp.merge_from_bytes(&bytes)?;
         Ok(resp)
     }
 
-    async fn execute_checkin_request(&self, msg: &[u8]) -> Result<AndroidCheckinResponse, Box<dyn Error>> {
-        let bytes = self.execute_request_helper("checkin", None, Some(msg), HeaderMap::new(), false).await?;
+    async fn execute_checkin_request(
+        &self,
+        msg: &[u8],
+    ) -> Result<AndroidCheckinResponse, Box<dyn Error>> {
+        let bytes = self
+            .execute_request_helper("checkin", None, Some(msg), HeaderMap::new(), false)
+            .await?;
         let mut resp = AndroidCheckinResponse::new();
         resp.merge_from_bytes(&bytes)?;
         Ok(resp)
@@ -454,12 +558,14 @@ impl Gpapi {
         let mut url = if fdfe {
             Url::parse(&format!(
                 "{}/fdfe/{}",
-                consts::defaults::DEFAULT_BASE_URL, endpoint
+                consts::defaults::DEFAULT_BASE_URL,
+                endpoint
             ))?
         } else {
             Url::parse(&format!(
                 "{}/{}",
-                consts::defaults::DEFAULT_BASE_URL, endpoint
+                consts::defaults::DEFAULT_BASE_URL,
+                endpoint
             ))?
         };
 
@@ -469,58 +575,65 @@ impl Gpapi {
 
         headers.insert(
             reqwest::header::ACCEPT_LANGUAGE,
-            HeaderValue::from_str(&self.locale.replace("_", "-"))?);
+            HeaderValue::from_str(&self.locale.replace("_", "-"))?,
+        );
         headers.insert(
             reqwest::header::USER_AGENT,
-            HeaderValue::from_str(&config.user_agent())?);
+            HeaderValue::from_str(&config.user_agent())?,
+        );
         headers.insert(
             reqwest::header::CONTENT_TYPE,
-            HeaderValue::from_static("application/x-protobuf"));
+            HeaderValue::from_static("application/x-protobuf"),
+        );
         headers.insert(
             "X-DFE-Encoded-Targets",
-            HeaderValue::from_static(consts::defaults::DEFAULT_DFE_TARGETS));
+            HeaderValue::from_static(consts::defaults::DEFAULT_DFE_TARGETS),
+        );
         headers.insert(
             "X-DFE-Client-Id",
-            HeaderValue::from_static("am-android-google"));
+            HeaderValue::from_static("am-android-google"),
+        );
         headers.insert(
             "X-DFE-MCCMCN",
             HeaderValue::from_str(
-                &ANDROID_CHECKINS.get(&self.device_codename).map(
-                    |d| d.cellOperator.clone().unwrap()
-                ).unwrap())?);
-        headers.insert(
-            "X-DFE-Network-Type",
-            HeaderValue::from_static("4"));
-        headers.insert(
-            "X-DFE-Content-Filters",
-            HeaderValue::from_static(""));
+                &ANDROID_CHECKINS
+                    .get(&self.device_codename)
+                    .map(|d| d.cellOperator.clone().unwrap())
+                    .unwrap(),
+            )?,
+        );
+        headers.insert("X-DFE-Network-Type", HeaderValue::from_static("4"));
+        headers.insert("X-DFE-Content-Filters", HeaderValue::from_static(""));
         headers.insert(
             "X-DFE-Request-Params",
-            HeaderValue::from_static("timeoutMs=4000"));
+            HeaderValue::from_static("timeoutMs=4000"),
+        );
         if let Some(gsf_id) = &self.gsf_id {
             headers.insert(
                 "X-DFE-Device-Id",
-                HeaderValue::from_str(&format!("{:x}", gsf_id))?);
+                HeaderValue::from_str(&format!("{:x}", gsf_id))?,
+            );
         }
         if let Some(auth_subtoken) = &self.auth_subtoken {
             headers.insert(
                 "Authorization",
-                HeaderValue::from_str(&format!("GoogleLogin auth={}", auth_subtoken))?);
+                HeaderValue::from_str(&format!("GoogleLogin auth={}", auth_subtoken))?,
+            );
         }
         if let Some(device_config_token) = &self.device_config_token {
             headers.insert(
                 "X-DFE-Device-Config-Token",
-                HeaderValue::from_str(&device_config_token)?);
+                HeaderValue::from_str(&device_config_token)?,
+            );
         }
         if let Some(device_checkin_consistency_token) = &self.device_checkin_consistency_token {
             headers.insert(
                 "X-DFE-Device-Checkin-Consistency-Token",
-                HeaderValue::from_str(&device_checkin_consistency_token)?);
+                HeaderValue::from_str(&device_checkin_consistency_token)?,
+            );
         }
-        if let Some(dfe_cookie) = &self.dfe_cookie{
-            headers.insert(
-                "X-DFE-Cookie",
-                HeaderValue::from_str(&dfe_cookie)?);
+        if let Some(dfe_cookie) = &self.dfe_cookie {
+            headers.insert("X-DFE-Cookie", HeaderValue::from_str(&dfe_cookie)?);
         }
 
         let query2 = query.clone();
@@ -536,14 +649,16 @@ impl Gpapi {
                 .post(url)
                 .headers(headers)
                 .form(&query2.unwrap())
-                .send().await?
+                .send()
+                .await?
         } else {
             if let Some(msg) = msg {
                 (*self.client)
                     .post(url)
                     .headers(headers)
                     .body(msg.to_owned())
-                    .send().await?
+                    .send()
+                    .await?
             } else {
                 (*self.client).get(url).headers(headers).send().await?
             }
@@ -564,7 +679,10 @@ fn parse_form_reply(data: &str) -> HashMap<String, String> {
     let lines: Vec<&str> = data.split_terminator('\n').collect();
     for line in lines.iter() {
         let kv: Vec<&str> = line.split_terminator('=').collect();
-        form_resp.insert(String::from(kv[0]).to_lowercase(), String::from(kv[1..].join("=")));
+        form_resp.insert(
+            String::from(kv[0]).to_lowercase(),
+            String::from(kv[1..].join("=")),
+        );
     }
     form_resp
 }
@@ -644,7 +762,11 @@ struct LoginRequest {
 
 impl LoginRequest {
     pub fn form_post(&self) -> String {
-        self.params.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<String>>().join("&")
+        self.params
+            .iter()
+            .map(|(k, v)| format!("{}={}", k, v))
+            .collect::<Vec<String>>()
+            .join("&")
     }
 }
 
@@ -680,9 +802,8 @@ impl Default for BuildConfiguration {
     fn default() -> BuildConfiguration {
         use consts::defaults::api_user_agent::{
             DEFAULT_API, DEFAULT_BUILD_ID, DEFAULT_DEVICE, DEFAULT_HARDWARE,
-            DEFAULT_IS_WIDE_SCREEN, DEFAULT_SUPPORTED_ABIS, DEFAULT_MODEL,
-            DEFAULT_PLATFORM_VERSION_RELEASE, DEFAULT_PRODUCT, DEFAULT_SDK,
-            DEFAULT_VERSION_CODE,
+            DEFAULT_IS_WIDE_SCREEN, DEFAULT_MODEL, DEFAULT_PLATFORM_VERSION_RELEASE,
+            DEFAULT_PRODUCT, DEFAULT_SDK, DEFAULT_SUPPORTED_ABIS, DEFAULT_VERSION_CODE,
         };
         use consts::defaults::{DEFAULT_FINSKY_AGENT, DEFAULT_FINSKY_VERSION};
 
@@ -710,17 +831,44 @@ impl Default for LoginRequest {
         params.insert(String::from("Email"), String::from(""));
         params.insert(String::from("EncryptedPasswd"), String::from(""));
         params.insert(String::from("add_account"), String::from("1"));
-        params.insert(String::from("accountType"), String::from(consts::defaults::DEFAULT_ACCOUNT_TYPE));
-        params.insert(String::from("google_play_services_version"), String::from(consts::defaults::DEFAULT_GOOGLE_PLAY_SERVICES_VERSION));
+        params.insert(
+            String::from("accountType"),
+            String::from(consts::defaults::DEFAULT_ACCOUNT_TYPE),
+        );
+        params.insert(
+            String::from("google_play_services_version"),
+            String::from(consts::defaults::DEFAULT_GOOGLE_PLAY_SERVICES_VERSION),
+        );
         params.insert(String::from("has_permission"), String::from("1"));
         params.insert(String::from("source"), String::from("android"));
-        params.insert(String::from("device_country"), String::from(consts::defaults::DEFAULT_DEVICE_COUNTRY));
-        params.insert(String::from("operatorCountry"), String::from(consts::defaults::DEFAULT_COUNTRY_CODE));
-        params.insert(String::from("lang"), String::from(consts::defaults::DEFAULT_LANGUAGE));
-        params.insert(String::from("client_sig"), String::from(consts::defaults::DEFAULT_CLIENT_SIG));
-        params.insert(String::from("callerSig"), String::from(consts::defaults::DEFAULT_CALLER_SIG));
-        params.insert(String::from("service"), String::from(consts::defaults::DEFAULT_SERVICE));
-        params.insert(String::from("callerPkg"), String::from(consts::defaults::DEFAULT_ANDROID_VENDING));
+        params.insert(
+            String::from("device_country"),
+            String::from(consts::defaults::DEFAULT_DEVICE_COUNTRY),
+        );
+        params.insert(
+            String::from("operatorCountry"),
+            String::from(consts::defaults::DEFAULT_COUNTRY_CODE),
+        );
+        params.insert(
+            String::from("lang"),
+            String::from(consts::defaults::DEFAULT_LANGUAGE),
+        );
+        params.insert(
+            String::from("client_sig"),
+            String::from(consts::defaults::DEFAULT_CLIENT_SIG),
+        );
+        params.insert(
+            String::from("callerSig"),
+            String::from(consts::defaults::DEFAULT_CALLER_SIG),
+        );
+        params.insert(
+            String::from("service"),
+            String::from(consts::defaults::DEFAULT_SERVICE),
+        );
+        params.insert(
+            String::from("callerPkg"),
+            String::from(consts::defaults::DEFAULT_ANDROID_VENDING),
+        );
         LoginRequest {
             params,
             build_config: None,
@@ -735,8 +883,13 @@ fn build_login_request(username: &str, encrypted_password: &str) -> LoginRequest
     };
     let mut login_request = LoginRequest::default();
     login_request.build_config = Some(build_config);
-    login_request.params.insert(String::from("Email"), String::from(username));
-    login_request.params.insert(String::from("EncryptedPasswd"), String::from(encrypted_password));
+    login_request
+        .params
+        .insert(String::from("Email"), String::from(username));
+    login_request.params.insert(
+        String::from("EncryptedPasswd"),
+        String::from(encrypted_password),
+    );
     login_request
 }
 
@@ -772,10 +925,7 @@ mod tests {
         #[tokio::test]
         #[ignore]
         async fn create_gpapi() {
-            match (
-                env::var("GOOGLE_LOGIN"),
-                env::var("GOOGLE_PASSWORD"),
-            ) {
+            match (env::var("GOOGLE_LOGIN"), env::var("GOOGLE_PASSWORD")) {
                 (Ok(username), Ok(password)) => {
                     let mut api = Gpapi::new("en_US", "UTC", "hero2lte");
                     api.login(username, password).await.ok();

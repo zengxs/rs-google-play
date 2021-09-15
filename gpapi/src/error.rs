@@ -1,6 +1,6 @@
 use std::error::Error as StdError;
-use std::io::Error as IOError;
 use std::fmt;
+use std::io::Error as IOError;
 
 use protobuf::error::ProtobufError;
 use tokio_dl_stream_to_disk::error::Error as TDSTDError;
@@ -25,9 +25,7 @@ pub struct Error {
 
 impl Error {
     pub fn new(k: ErrorKind) -> Error {
-        Error {
-            kind: k,
-        }
+        Error { kind: k }
     }
 
     pub fn kind(&self) -> &ErrorKind {
@@ -39,7 +37,7 @@ impl From<IOError> for Error {
     fn from(err: IOError) -> Error {
         Error {
             kind: ErrorKind::IO(err),
-	}
+        }
     }
 }
 
@@ -47,26 +45,30 @@ impl From<Box<dyn StdError>> for Error {
     fn from(err: Box<dyn StdError>) -> Error {
         Error {
             kind: ErrorKind::Other(err),
-	}
+        }
     }
 }
 
 impl From<TDSTDError> for Error {
     fn from(err: TDSTDError) -> Error {
         match err.kind() {
-            TDSTDErrorKind::FileExists => {
-                Error { kind: ErrorKind::FileExists }
+            TDSTDErrorKind::FileExists => Error {
+                kind: ErrorKind::FileExists,
             },
-            TDSTDErrorKind::DirectoryMissing => {
-                Error { kind: ErrorKind::DirectoryMissing }
+            TDSTDErrorKind::DirectoryMissing => Error {
+                kind: ErrorKind::DirectoryMissing,
             },
             TDSTDErrorKind::IO(_) => {
                 let err = err.into_inner_io().unwrap();
-                Error { kind: ErrorKind::IO(err) }
-            },
+                Error {
+                    kind: ErrorKind::IO(err),
+                }
+            }
             TDSTDErrorKind::Other(_) => {
                 let err = err.into_inner_other().unwrap();
-                Error { kind: ErrorKind::Other(err) }
+                Error {
+                    kind: ErrorKind::Other(err),
+                }
             }
         }
     }
@@ -76,7 +78,7 @@ impl From<&str> for Error {
     fn from(err: &str) -> Error {
         Error {
             kind: ErrorKind::Str(err.to_string()),
-	}
+        }
     }
 }
 
@@ -84,17 +86,15 @@ impl From<String> for Error {
     fn from(err: String) -> Error {
         Error {
             kind: ErrorKind::Str(err),
-	}
+        }
     }
 }
-
-
 
 impl From<ProtobufError> for Error {
     fn from(err: ProtobufError) -> Error {
         Error {
             kind: ErrorKind::Protobuf(err),
-	}
+        }
     }
 }
 
