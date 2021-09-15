@@ -128,6 +128,11 @@ impl Gpapi {
         let login = encrypt_login(&username, &password.into()).unwrap();
         let encrypted_password = base64_urlsafe(&login);
         let form = self.authenticate(&username, &encrypted_password).await?;
+        if let Some(err) = form.get("error") {
+            if err == "NeedsBrowser" {
+                return Err(GpapiError::new(GpapiErrorKind::SecurityCheck));
+            }
+        }
         if let Some(token) = form.get("auth") {
             let token = token.to_string();
             self.gsf_id = self.checkin(&username, &token).await?;
