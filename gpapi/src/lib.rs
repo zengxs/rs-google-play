@@ -564,7 +564,7 @@ fn parse_form_reply(data: &str) -> HashMap<String, String> {
     let lines: Vec<&str> = data.split_terminator('\n').collect();
     for line in lines.iter() {
         let kv: Vec<&str> = line.split_terminator('=').collect();
-        form_resp.insert(String::from(kv[0]).to_lowercase(), String::from(kv[1]));
+        form_resp.insert(String::from(kv[0]).to_lowercase(), String::from(kv[1..].join("=")));
     }
     form_resp
 }
