@@ -133,7 +133,7 @@ impl Gpapi {
         password: S,
     ) -> Result<(), GpapiError> {
         let username = username.into();
-        let login = encrypt_login(&username, &password.into()).unwrap();
+        let login = encrypt_login(&username, &password.into())?;
         let encrypted_password = base64_urlsafe(&login);
         let form = self.authenticate(&username, &encrypted_password).await?;
         if let Some(err) = form.get("error") {
@@ -690,28 +690,27 @@ fn parse_form_reply(data: &str) -> HashMap<String, String> {
 /// Handles encrypting your login/password using Google's public key
 /// Produces something of the format:
 /// |00|4 bytes of sha1(publicKey)|rsaEncrypt(publicKeyPem, "login\x00password")|
-fn encrypt_login(login: &str, password: &str) -> Option<Vec<u8>> {
+fn encrypt_login(login: &str, password: &str) -> Result<Vec<u8>, GpapiError> {
     let raw = base64::decode(consts::GOOGLE_PUB_KEY_B64).unwrap();
-    if let Ok(Some(pubkey)) = extract_pubkey(&raw) {
-        let rsa = build_openssl_rsa(&pubkey);
+    let pubkey = extract_pubkey(&raw)?.ok_or("Could not extract public key")?;
+    let rsa = build_openssl_rsa(&pubkey);
 
-        let data = format!("{login}\x00{password}", login = login, password = password);
-        let mut to = vec![0u8; rsa.size() as usize];
-        let padding = openssl::rsa::Padding::PKCS1_OAEP;
-
-        if let Ok(_sz) = rsa.public_encrypt(data.as_bytes(), &mut to, padding) {
-            let sha1 = openssl::sha::sha1(&raw);
-            let mut res = vec![];
-            res.push(0x00);
-            res.extend(&sha1[0..4]);
-            res.extend(&to);
-            Some(res)
-        } else {
-            None
-        }
-    } else {
-        None
+    let data = format!("{login}\x00{password}", login = login, password = password);
+    if data.as_bytes().len() >= 87 {
+        return Err(GpapiError::new(GpapiErrorKind::EncryptLogin));
     }
+
+    let mut to = vec![0u8; rsa.size() as usize];
+    let padding = openssl::rsa::Padding::PKCS1_OAEP;
+
+    rsa.public_encrypt(data.as_bytes(), &mut to, padding)
+        .unwrap();
+    let sha1 = openssl::sha::sha1(&raw);
+    let mut res = vec![];
+    res.push(0x00);
+    res.extend(&sha1[0..4]);
+    res.extend(&to);
+    Ok(res)
 }
 
 ///
