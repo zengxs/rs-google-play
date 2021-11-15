@@ -9,6 +9,7 @@ pub mod defaults {
     pub const DEFAULT_LANGUAGE: &str = "en_US";
     pub const DEFAULT_CLIENT_SIG: &str = "38918a453d07199354f8b19af05ec6562ced5788";
     pub const DEFAULT_CALLER_SIG: &str = "38918a453d07199354f8b19af05ec6562ced5788";
+    pub const DEFAULT_DROIDGUARD_RESULTS: &str = "dummy123";
     pub const DEFAULT_COUNTRY_CODE: &str = "us";
     pub const DEFAULT_AUTH_USER_AGENT: &str = "GoogleAuth/1.4";
     pub mod api_user_agent {

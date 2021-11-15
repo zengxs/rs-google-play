@@ -861,6 +861,10 @@ impl Default for LoginRequest {
             String::from(consts::defaults::DEFAULT_CALLER_SIG),
         );
         params.insert(
+            String::from("droidguard_results"),
+            String::from(consts::defaults::DEFAULT_DROIDGUARD_RESULTS),
+        );
+        params.insert(
             String::from("service"),
             String::from(consts::defaults::DEFAULT_SERVICE),
         );
