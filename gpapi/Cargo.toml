@@ -1,6 +1,6 @@
 [package]
 name = "gpapi"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["David Weinstein <dweinst@insitusec.com>", "Bill Budington <bill@eff.org>"]
 build = "build.rs"
 license = "MIT"
@@ -23,7 +23,7 @@ hyper-openssl = "0.9"
 googleplay-protobuf = { version = "0.1", features = ["with-serde"] }
 bincode = "1"
 futures-util = { version = "0.3", features = ["io"] }
-tokio-dl-stream-to-disk = "0.2"
+tokio-dl-stream-to-disk = "0.3"
 
 [build-dependencies]
 googleplay-protobuf = { version = "0.1", features = ["with-serde"] }
