@@ -1,10 +1,10 @@
 [package]
 name = "gpapi"
-version = "0.5.0"
+version = "1.0.0"
 authors = ["David Weinstein <dweinst@insitusec.com>", "Bill Budington <bill@eff.org>"]
 build = "build.rs"
 license = "MIT"
-edition = "2018"
+edition = "2021"
 description = "A library for interacting with the Google Play API"
 homepage = "https://github.com/EFForg/rs-google-play/tree/master/gpapi"
 repository = "https://github.com/EFForg/rs-google-play/tree/master/gpapi"

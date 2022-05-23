@@ -15,7 +15,7 @@
 //! }
 //! ```
 //!
-//! From here, you can get package details, get the URL to download a package, or use the library to download it.
+//! From here, you can get package details, get the info to download a package, or use the library to download it.
 //!
 //! ```rust
 //! # use gpapi::Gpapi;
@@ -27,10 +27,10 @@
 //! let details = gpa.details("com.instagram.android").await;
 //! println!("{:?}", details);
 //!
-//! let download_url = gpa.get_download_url("com.instagram.android", None).await;
-//! println!("{:?}", download_url);
+//! let download_info = gpa.get_download_info("com.instagram.android", None).await;
+//! println!("{:?}", download_info);
 //!
-//! gpa.download("com.instagram.android", None, &Path::new("/tmp/testing")).await;
+//! gpa.download("com.instagram.android", None, true, &Path::new("/tmp/testing")).await;
 //! # }
 //! ```
 
@@ -39,7 +39,8 @@ pub mod error;
 
 use std::collections::HashMap;
 use std::error::Error;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
@@ -259,36 +260,61 @@ impl Gpapi {
         &self,
         pkg_name: S,
         version_code: Option<i32>,
+        split_if_available: bool,
         dst_path: &Path,
     ) -> Result<(), GpapiError> {
         let pkg_name = pkg_name.into();
-        let fname = format!("{}.apk", pkg_name);
+        let download_info = self
+            .get_download_info(pkg_name.clone(), version_code)
+            .await?;
 
-        if let Some(download_url) = self
-            .get_download_url(pkg_name.clone(), version_code)
-            .await?
-        {
-            match tokio_dl_stream_to_disk::download(download_url, dst_path, fname).await {
-                Ok(()) => Ok(()),
-                Err(err) => Err(err.into()),
+        if split_if_available && download_info.1.len() > 0 {
+            let mut dst_path = PathBuf::from(dst_path);
+            if dst_path.is_dir() {
+                dst_path.push(pkg_name.clone());
+                if dst_path.is_dir() {
+                    Err(GpapiError::new(GpapiErrorKind::DirectoryExists))
+                } else {
+                    fs::create_dir(&dst_path).map_err(|e| GpapiError::from(e))?;
+                    for split in download_info.1 {
+                        if let (Some(download_name), Some(download_url)) = split {
+                            let fname = format!("{}.{}.apk", pkg_name, download_name);
+                            tokio_dl_stream_to_disk::download(download_url, &dst_path, fname).await.map_err(|e| GpapiError::from(e))?;
+                        }
+                    }
+                    Ok(())
+                }
+            } else {
+                Err(GpapiError::new(GpapiErrorKind::DirectoryMissing))
             }
         } else {
-            Err("Could not download app - no download URL available".into())
+            let fname = format!("{}.apk", pkg_name);
+            if let Some(download_url) = download_info.0 {
+                tokio_dl_stream_to_disk::download(download_url, dst_path, fname).await.map_err(|e| GpapiError::from(e))
+            } else {
+                Err("Could not download app - no download URL available".into())
+            }
         }
     }
 
-    /// Retrieve the download URL for a package, given a package ID and optional version code.
+    /// Retrieve the download URL(s) and names for a package, given a package ID and optional
+    /// version code.
     ///
     /// # Arguments
     ///
     /// * `pkg_name` - A string type specifying the package's app ID, e.g. `com.instagram.android`
     /// * `version_code` - An optinal version code, given in i32.  If omitted, the latest version will
     /// be used
-    pub async fn get_download_url<S: Into<String>>(
+    ///
+    /// # Returns
+    ///
+    /// * An Option<String> to the full APK download URL, followed by a Vec<(Option<String>,
+    /// Option<String>)> which corresponds to a list of download URLs and names for the split APK.
+    pub async fn get_download_info<S: Into<String>>(
         &self,
         pkg_name: S,
         mut version_code: Option<i32>,
-    ) -> Result<Option<String>, GpapiError> {
+    ) -> Result<(Option<String>, Vec<(Option<String>, Option<String>)>), GpapiError> {
         let pkg_name = pkg_name.into();
         if self.auth_subtoken.is_none() {
             return Err("Logging in is required for this action".into());
@@ -322,7 +348,7 @@ impl Gpapi {
         pkg_name: S,
         mut version_code: Option<i32>,
         download_token: S,
-    ) -> Result<Option<String>, GpapiError> {
+    ) -> Result<(Option<String>, Vec<(Option<String>, Option<String>)>), GpapiError> {
         let pkg_name = pkg_name.into();
         let download_token = download_token.into();
         if self.auth_subtoken.is_none() {
@@ -344,7 +370,11 @@ impl Gpapi {
         if let Some(payload) = resp.payload.into_option() {
             if let Some(delivery_response) = payload.deliveryResponse.into_option() {
                 if let Some(app_delivery_data) = delivery_response.appDeliveryData.into_option() {
-                    return Ok(app_delivery_data.downloadUrl.into_option());
+                    let mut splits = Vec::new();
+                    for app_split in app_delivery_data.split {
+                        splits.push((app_split.name.into_option(), app_split.downloadUrl.into_option()));
+                    }
+                    return Ok((app_delivery_data.downloadUrl.into_option(), splits));
                 }
             }
         }

@@ -9,6 +9,7 @@ use tokio_dl_stream_to_disk::error::ErrorKind as TDSTDErrorKind;
 #[derive(Debug)]
 pub enum ErrorKind {
     FileExists,
+    DirectoryExists,
     DirectoryMissing,
     InvalidApp,
     SecurityCheck,
@@ -110,6 +111,7 @@ impl fmt::Display for Error {
         match self.kind() {
             ErrorKind::FileExists => write!(f, "File already exists"),
             ErrorKind::InvalidApp => write!(f, "Invalid app response"),
+            ErrorKind::DirectoryExists => write!(f, "Directory already exists"),
             ErrorKind::DirectoryMissing => write!(f, "Destination path provided is not a valid directory"),
             ErrorKind::SecurityCheck => write!(f, "Security check is needed, try to visit https://accounts.google.com/b/0/DisplayUnlockCaptcha to unlock, or setup an app-specific password"),
             ErrorKind::EncryptLogin => write!(f, "Error encrypting login information: login + password combination is too long. Please use a shorter or app-specific password"),
