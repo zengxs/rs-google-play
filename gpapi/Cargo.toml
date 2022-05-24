@@ -1,6 +1,6 @@
 [package]
 name = "gpapi"
-version = "1.0.0"
+version = "2.0.0"
 authors = ["David Weinstein <dweinst@insitusec.com>", "Bill Budington <bill@eff.org>"]
 build = "build.rs"
 license = "MIT"
