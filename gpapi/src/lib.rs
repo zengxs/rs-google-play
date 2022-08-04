@@ -1009,6 +1009,7 @@ mod tests {
         use googleplay_protobuf::BulkDetailsRequest;
 
         #[tokio::test]
+        #[ignore]
         async fn create_gpapi() {
             match (env::var("GOOGLE_LOGIN"), env::var("GOOGLE_PASSWORD")) {
                 (Ok(username), Ok(password)) => {
