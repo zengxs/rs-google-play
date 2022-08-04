@@ -1,4 +1,4 @@
-//! A library for interacting with the Google Play API, strongly following [google play python API](https://github.com/NoMore201/googleplay-api.git) patterns.
+//! A library for interacting with the Google Play API, strongly following [google play python API](https://github.com/NoMore200/googleplay-api.git) patterns.
 //!
 //! # Getting Started
 //!
@@ -40,6 +40,7 @@ pub mod error;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -49,7 +50,7 @@ use hyper::header::{HeaderName as HyperHeaderName, HeaderValue as HyperHeaderVal
 use hyper::{Body, Client, Method, Request};
 use hyper_openssl::HttpsConnector;
 use openssl::ssl::{SslConnector, SslMethod};
-use protobuf::{Message, SingularField, SingularPtrField};
+use prost::Message;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Url;
 
@@ -67,9 +68,9 @@ extern crate lazy_static;
 static DEVICES_ENCODED: &[u8] = include_bytes!("device_properties.bin");
 static CHECKINS_ENCODED: &[u8] = include_bytes!("android_checkins.bin");
 lazy_static! {
-    static ref DEVICE_CONFIGURATIONS: HashMap<String, DeviceConfigurationProto> =
+    static ref DEVICE_CONFIGURATIONS: HashMap<String, Vec<u8>> =
         bincode::deserialize(DEVICES_ENCODED).unwrap();
-    static ref ANDROID_CHECKINS: HashMap<String, AndroidCheckinProto> =
+    static ref ANDROID_CHECKINS: HashMap<String, Vec<u8>> =
         bincode::deserialize(CHECKINS_ENCODED).unwrap();
 }
 
@@ -154,7 +155,7 @@ impl Gpapi {
                 .await?;
             if let Some(upload_device_config_token) = self.upload_device_config().await? {
                 self.device_config_token =
-                    Some(upload_device_config_token.uploadDeviceConfigToken.unwrap());
+                    Some(upload_device_config_token.upload_device_config_token.unwrap());
                 Ok(())
             } else {
                 Err("No device config token".into())
@@ -171,7 +172,10 @@ impl Gpapi {
     ) -> Result<Option<i64>, Box<dyn Error>> {
         let mut checkin = ANDROID_CHECKINS
             .get(&self.device_codename)
-            .map(|c| c.clone())
+            .map(|raw| {
+                let raw = raw.clone();
+                AndroidCheckinProto::decode(&mut Cursor::new(raw)).unwrap()
+            })
             .expect("Invalid device codename");
 
         checkin.build.as_mut().map(|mut b| {
@@ -184,44 +188,51 @@ impl Gpapi {
             )
         });
 
-        let mut req = AndroidCheckinRequest::new();
+        let mut req = AndroidCheckinRequest::default();
         req.id = Some(0);
-        req.checkin = SingularPtrField::from(Some(checkin));
-        req.locale = SingularField::from(Some(self.locale.clone()));
-        req.timeZone = SingularField::from(Some(self.timezone.clone()));
+        req.checkin = Some(checkin);
+        req.locale = Some(self.locale.clone());
+        req.time_zone = Some(self.timezone.clone());
         req.version = Some(3);
-        req.deviceConfiguration = SingularPtrField::from(
-            DEVICE_CONFIGURATIONS
-                .get(&self.device_codename)
-                .map(|c| c.clone()),
-        );
+        req.device_configuration = DEVICE_CONFIGURATIONS
+            .get(&self.device_codename)
+            .map(|raw| {
+                let raw = raw.clone();
+                DeviceConfigurationProto::decode(&mut Cursor::new(raw)).unwrap()
+            });
         req.fragment = Some(0);
         let mut req_followup = req.clone();
-        let bytes = req.write_to_bytes()?;
+        let mut bytes = Vec::new();
+        bytes.reserve(req.encoded_len());
+        req.encode(&mut bytes).unwrap();
         let resp = self.execute_checkin_request(&bytes).await?;
-        self.device_checkin_consistency_token = resp.deviceCheckinConsistencyToken.into_option();
+        self.device_checkin_consistency_token = resp.device_checkin_consistency_token;
 
         // checkin again to upload gfsid
-        req_followup.id = resp.androidId.map(|id| id as i64);
-        req_followup.securityToken = resp.securityToken;
-        req_followup.accountCookie.push(format!("[{}]", username));
-        req_followup.accountCookie.push(ac2dm_token.to_string());
-        let bytes = req_followup.write_to_bytes()?;
+        req_followup.id = resp.android_id.map(|id| id as i64);
+        req_followup.security_token = resp.security_token;
+        req_followup.account_cookie.push(format!("[{}]", username));
+        req_followup.account_cookie.push(ac2dm_token.to_string());
+        let mut bytes = Vec::new();
+        bytes.reserve(req_followup.encoded_len());
+        req_followup.encode(&mut bytes).unwrap();
         let resp = self.execute_checkin_request(&bytes).await?;
-        Ok(resp.androidId.map(|id| id as i64))
+        Ok(resp.android_id.map(|id| id as i64))
     }
 
     async fn upload_device_config(
         &self,
     ) -> Result<Option<UploadDeviceConfigResponse>, Box<dyn Error>> {
-        let mut req = UploadDeviceConfigRequest::new();
-        req.deviceConfiguration = SingularPtrField::from(
-            DEVICE_CONFIGURATIONS
-                .get(&self.device_codename)
-                .map(|c| c.clone()),
-        );
-        //let headers = self.get_headers();
-        let bytes = req.write_to_bytes()?;
+        let mut req = UploadDeviceConfigRequest::default();
+        req.device_configuration = DEVICE_CONFIGURATIONS
+            .get(&self.device_codename)
+            .map(|raw| {
+                let raw = raw.clone();
+                DeviceConfigurationProto::decode(&mut Cursor::new(raw)).unwrap()
+            });
+        let mut bytes = Vec::new();
+        bytes.reserve(req.encoded_len());
+        req.encode(&mut bytes).unwrap();
 
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -239,8 +250,8 @@ impl Gpapi {
         let resp = self
             .execute_request_v2("uploadDeviceConfig", None, Some(&bytes), headers)
             .await?;
-        if let Some(payload) = resp.payload.into_option() {
-            Ok(payload.uploadDeviceConfigResponse.into_option())
+        if let Some(payload) = resp.payload {
+            Ok(payload.upload_device_config_response)
         } else {
             Ok(None)
         }
@@ -356,9 +367,9 @@ impl Gpapi {
             self.execute_request_v2("purchase", Some(req), None, HeaderMap::new())
                 .await?
         };
-        if let Some(payload) = resp.payload.into_option() {
-            if let Some(buy_response) = payload.buyResponse.into_option() {
-                if let Some(download_token) = buy_response.downloadToken.into_option() {
+        if let Some(payload) = resp.payload {
+            if let Some(buy_response) = payload.buy_response {
+                if let Some(download_token) = buy_response.download_token {
                     return self
                         .delivery(&pkg_name, version_code.clone(), &download_token)
                         .await;
@@ -392,27 +403,27 @@ impl Gpapi {
             self.execute_request_v2("delivery", Some(req), None, HeaderMap::new())
                 .await?
         };
-        if let Some(payload) = resp.payload.into_option() {
-            if let Some(delivery_response) = payload.deliveryResponse.into_option() {
-                if let Some(app_delivery_data) = delivery_response.appDeliveryData.into_option() {
+        if let Some(payload) = resp.payload {
+            if let Some(delivery_response) = payload.delivery_response {
+                if let Some(app_delivery_data) = delivery_response.app_delivery_data {
                     let mut splits = Vec::new();
                     for app_split in app_delivery_data.split {
-                        splits.push((app_split.name.into_option(), app_split.downloadUrl.into_option()));
+                        splits.push((app_split.name, app_split.download_url));
                     }
                     let mut additional_files: Vec<(Option<String>, Option<String>)> = Vec::new();
-                    for additional_file in app_delivery_data.additionalFile {
-                        if let Some(file_type) = additional_file.fileType {
-                            if let Some(version_code) = additional_file.versionCode {
+                    for additional_file in app_delivery_data.additional_file {
+                        if let Some(file_type) = additional_file.file_type {
+                            if let Some(version_code) = additional_file.version_code {
                                 let main_patch = match file_type {
                                     0 => "main",
                                     _ => "patch",
                                 };
                                 let filename = format!("{}.{}.{}.obb", main_patch, version_code, pkg_name);
-                                additional_files.push((Some(filename), additional_file.downloadUrl.into_option()));
+                                additional_files.push((Some(filename), additional_file.download_url));
                             }
                         }
                     }
-                    return Ok((app_delivery_data.downloadUrl.into_option(), splits, additional_files));
+                    return Ok((app_delivery_data.download_url, splits, additional_files));
                 }
             }
         }
@@ -434,8 +445,8 @@ impl Gpapi {
         let resp = self
             .execute_request_v2("details", Some(req), None, HeaderMap::new())
             .await?;
-        if let Some(payload) = resp.payload.into_option() {
-            Ok(payload.detailsResponse.into_option())
+        if let Some(payload) = resp.payload {
+            Ok(payload.details_response)
         } else {
             Ok(None)
         }
@@ -443,10 +454,10 @@ impl Gpapi {
 
     async fn get_latest_version_for_pkg_name(&self, pkg_name: &str) -> Result<i32, GpapiError> {
         if let Some(details) = self.details(pkg_name).await? {
-            if let Some(doc_v2) = details.docV2.into_option() {
-                if let Some(details) = doc_v2.details.into_option() {
-                    if let Some(app_details) = details.appDetails.into_option() {
-                        if let Some(version_code) = app_details.versionCode {
+            if let Some(doc_v2) = details.doc_v2 {
+                if let Some(details) = doc_v2.details {
+                    if let Some(app_details) = details.app_details {
+                        if let Some(version_code) = app_details.version_code {
                             return Ok(version_code);
                         }
                     }
@@ -465,15 +476,17 @@ impl Gpapi {
         &self,
         pkg_names: &[&str],
     ) -> Result<Option<BulkDetailsResponse>, GpapiError> {
-        let mut req = BulkDetailsRequest::new();
+        let mut req = BulkDetailsRequest::default();
         req.docid = pkg_names.into_iter().cloned().map(String::from).collect();
-        req.includeChildDocs = Some(false);
-        let bytes = req.write_to_bytes()?;
+        req.include_child_docs = Some(false);
+        let mut bytes = Vec::new();
+        bytes.reserve(req.encoded_len());
+        req.encode(&mut bytes).unwrap();
         let resp = self
             .execute_request_v2("bulkDetails", None, Some(&bytes), HeaderMap::new())
             .await?;
-        if let Some(payload) = resp.payload.into_option() {
-            Ok(payload.bulkDetailsResponse.into_option())
+        if let Some(payload) = resp.payload {
+            Ok(payload.bulk_details_response)
         } else {
             Ok(None)
         }
@@ -598,8 +611,7 @@ impl Gpapi {
         let bytes = self
             .execute_request_helper(endpoint, query, msg, headers, true)
             .await?;
-        let mut resp = ResponseWrapper::new();
-        resp.merge_from_bytes(&bytes)?;
+        let resp = ResponseWrapper::decode(&mut Cursor::new(bytes))?;
         Ok(resp)
     }
 
@@ -610,8 +622,7 @@ impl Gpapi {
         let bytes = self
             .execute_request_helper("checkin", None, Some(msg), HeaderMap::new(), false)
             .await?;
-        let mut resp = AndroidCheckinResponse::new();
-        resp.merge_from_bytes(&bytes)?;
+        let resp = AndroidCheckinResponse::decode(&mut Cursor::new(bytes))?;
         Ok(resp)
     }
 
@@ -666,7 +677,11 @@ impl Gpapi {
             HeaderValue::from_str(
                 &ANDROID_CHECKINS
                     .get(&self.device_codename)
-                    .map(|d| d.cellOperator.clone().unwrap())
+                    .map(|raw| {
+                        let raw = raw.clone();
+                        let checkin = AndroidCheckinProto::decode(&mut Cursor::new(raw)).unwrap();
+                        checkin.cell_operator.clone().unwrap()
+                    })
                     .unwrap(),
             )?,
         );
@@ -807,7 +822,7 @@ fn build_openssl_rsa(p: &PubKey) -> openssl::rsa::Rsa<openssl::pkey::Public> {
 ///
 fn extract_pubkey(buf: &[u8]) -> Result<Option<PubKey>, Box<dyn Error>> {
     use byteorder::{NetworkEndian, ReadBytesExt};
-    use std::io::{Cursor, Read};
+    use std::io::Read;
     let mut cur = Cursor::new(&buf);
 
     let sz = cur.read_u32::<NetworkEndian>()?;
@@ -994,7 +1009,6 @@ mod tests {
         use googleplay_protobuf::BulkDetailsRequest;
 
         #[tokio::test]
-        #[ignore]
         async fn create_gpapi() {
             match (env::var("GOOGLE_LOGIN"), env::var("GOOGLE_PASSWORD")) {
                 (Ok(username), Ok(password)) => {
@@ -1014,9 +1028,9 @@ mod tests {
 
         #[test]
         fn test_protobuf() {
-            let mut bdr = BulkDetailsRequest::new();
+            let mut bdr = BulkDetailsRequest::default();
             bdr.docid = vec!["test".to_string()].into();
-            bdr.includeChildDocs = Some(true);
+            bdr.include_child_docs = Some(true);
         }
     }
 }

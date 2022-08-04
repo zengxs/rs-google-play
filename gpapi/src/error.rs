@@ -2,7 +2,6 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::io::Error as IOError;
 
-use protobuf::error::ProtobufError;
 use tokio_dl_stream_to_disk::error::Error as TDSTDError;
 use tokio_dl_stream_to_disk::error::ErrorKind as TDSTDErrorKind;
 
@@ -17,7 +16,6 @@ pub enum ErrorKind {
     PermissionDenied,
     IO(IOError),
     Str(String),
-    Protobuf(ProtobufError),
     Other(Box<dyn StdError>),
 }
 
@@ -96,14 +94,6 @@ impl From<String> for Error {
     }
 }
 
-impl From<ProtobufError> for Error {
-    fn from(err: ProtobufError) -> Error {
-        Error {
-            kind: ErrorKind::Protobuf(err),
-        }
-    }
-}
-
 impl StdError for Error {}
 
 impl fmt::Display for Error {
@@ -118,7 +108,6 @@ impl fmt::Display for Error {
             ErrorKind::PermissionDenied => write!(f, "Cannot create file: permission denied"),
             ErrorKind::IO(err) => err.fmt(f),
             ErrorKind::Str(err) => err.fmt(f),
-            ErrorKind::Protobuf(err) => err.fmt(f),
             ErrorKind::Other(err) => err.fmt(f),
         }
     }
