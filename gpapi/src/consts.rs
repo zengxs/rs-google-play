@@ -3,7 +3,6 @@
 pub const GOOGLE_PUB_KEY_B64: &'static str = "AAAAgMom/1a/v0lblO2Ubrt60J2gcuXSljGFQXgcyZWveWLEwo6prwgi3iJIZdodyhKZQrNWp5nKJ3srRXcUW+F1BD3baEVGcmEgqaLZUNBjm057pKRI16kB0YppeGx5qIQ5QjKzsR8ETQbKLNWgRY0QRNVz34kMJR3P/LgHax/6rmf5AAAAAwEAAQ==";
 /// Exact ciphersuite specification is needed, see:
 /// https://stackoverflow.com/questions/22832104/how-can-i-see-hidden-app-data-in-google-drive
-pub const GOOGLE_ACCEPTED_CIPHERS: &'static str = "TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256:ECDHE+AESGCM:ECDHE+CHACHA20:DHE+AESGCM:DHE+CHACHA20:ECDH+AESGCM:DH+AESGCM:ECDH+AES:DH+AES:RSA+AESGCM:RSA+AES:!aNULL:!eNULL:!MD5:!DSS";
 
 pub mod defaults {
     pub const DEFAULT_LANGUAGE: &str = "en_US";

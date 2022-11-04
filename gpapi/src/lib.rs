@@ -48,11 +48,25 @@ use bytes::Bytes;
 use hyper::client::HttpConnector;
 use hyper::header::{HeaderName as HyperHeaderName, HeaderValue as HyperHeaderValue};
 use hyper::{Body, Client, Method, Request};
-use hyper_openssl::HttpsConnector;
-use openssl::ssl::{SslConnector, SslMethod};
+use hyper_rustls::{HttpsConnector, ConfigBuilderExt};
 use prost::Message;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Url;
+use rsa::{BigUint, PublicKey, RsaPublicKey, PaddingScheme};
+use rustls::client::ClientConfig;
+use rustls::cipher_suite::{
+    TLS13_AES_256_GCM_SHA384,
+    TLS13_CHACHA20_POLY1305_SHA256,
+    TLS13_AES_128_GCM_SHA256,
+    TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+    TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+    TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+    TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+    TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+    TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+};
+
+use sha1::{Sha1, Digest};
 
 use crate::error::{Error as GpapiError, ErrorKind as GpapiErrorKind};
 
@@ -104,14 +118,30 @@ impl Gpapi {
     /// * `timezone` - A string type specifying the timezone , e.g. "UTC"
     /// * `device_codename` - A string type specifying the device codename, e.g. "hero2lte"
     pub fn new<S: Into<String>>(locale: S, timezone: S, device_codename: S) -> Self {
-        let mut http = HttpConnector::new();
-        http.enforce_http(false);
-        let mut connector = SslConnector::builder(SslMethod::tls()).unwrap();
-        connector
-            .set_cipher_list(consts::GOOGLE_ACCEPTED_CIPHERS)
-            .unwrap();
-        let https = HttpsConnector::with_connector(http, connector).unwrap();
-        let hyper_client = Client::builder().build::<_, hyper::Body>(https);
+        let config = ClientConfig::builder()
+            .with_cipher_suites(&[
+                TLS13_AES_256_GCM_SHA384,
+                TLS13_CHACHA20_POLY1305_SHA256,
+                TLS13_AES_128_GCM_SHA256,
+                TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+                TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+                TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+                TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+                TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+                TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+            ])
+            .with_safe_default_kx_groups()
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_native_roots()
+            .with_no_client_auth(); 
+        let https = hyper_rustls::HttpsConnectorBuilder::new()
+            .with_tls_config(config)
+            .https_only()
+            .enable_http1()
+            .build();
+
+        let hyper_client: Client<_, hyper::Body> = Client::builder().build(https);
 
         Gpapi {
             locale: locale.into(),
@@ -776,23 +806,25 @@ fn parse_form_reply(data: &str) -> HashMap<String, String> {
 fn encrypt_login(login: &str, password: &str) -> Result<Vec<u8>, GpapiError> {
     let raw = base64::decode(consts::GOOGLE_PUB_KEY_B64).unwrap();
     let pubkey = extract_pubkey(&raw)?.ok_or("Could not extract public key")?;
-    let rsa = build_openssl_rsa(&pubkey);
+    let rsa = build_rsa(&pubkey);
+    let mut rng = rand::thread_rng();
 
-    let data = format!("{login}\x00{password}", login = login, password = password);
-    if data.as_bytes().len() >= 87 {
+    let data = format!("{login}\x00{password}", login = login, password = password).into_bytes();
+    if data.len() >= 87 {
         return Err(GpapiError::new(GpapiErrorKind::EncryptLogin));
     }
 
-    let mut to = vec![0u8; rsa.size() as usize];
-    let padding = openssl::rsa::Padding::PKCS1_OAEP;
+    let padding = PaddingScheme::new_oaep::<sha1::Sha1>();
+    let enc_data = rsa.encrypt(&mut rng, padding, &data).unwrap();
 
-    rsa.public_encrypt(data.as_bytes(), &mut to, padding)
-        .unwrap();
-    let sha1 = openssl::sha::sha1(&raw);
+    let mut hasher = Sha1::new();
+    hasher.update(&raw);
+    let sha1 = hasher.finalize();
+
     let mut res = vec![];
     res.push(0x00);
     res.extend(&sha1[0..4]);
-    res.extend(&to);
+    res.extend(&enc_data);
     Ok(res)
 }
 
@@ -804,17 +836,12 @@ fn base64_urlsafe(input: &[u8]) -> String {
 }
 
 ///
-/// Gen up an `openssl::rsa::Rsa` from a `PubKey`.
+/// Gen up an `rsa::RsaPublicKey` from a `PubKey`.
 ///
-fn build_openssl_rsa(p: &PubKey) -> openssl::rsa::Rsa<openssl::pkey::Public> {
-    use openssl::bn::BigNum;
-    use openssl::rsa::Rsa;
-
-    let modulus = BigNum::from_hex_str(&hex::encode(&p.modulus)).unwrap();
-    let exp = BigNum::from_hex_str(&hex::encode(&p.exp)).unwrap();
-    let rsa = Rsa::from_public_components(modulus, exp).unwrap();
-
-    rsa
+fn build_rsa(p: &PubKey) -> RsaPublicKey {
+    let modulus = BigUint::from_bytes_be(&p.modulus);
+    let exp = BigUint::from_bytes_be(&p.exp);
+    RsaPublicKey::new(modulus, exp).unwrap()
 }
 
 ///
