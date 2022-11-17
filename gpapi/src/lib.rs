@@ -320,14 +320,13 @@ impl Gpapi {
                     tokio_dl_stream_to_disk::download(download_url, &dst_path, fname).await.map_err(|e| GpapiError::from(e))?;
                 }
             }
-            Ok(())
+        }
+
+        let fname = format!("{}.apk", pkg_name);
+        if let Some(download_url) = download_info.0 {
+            tokio_dl_stream_to_disk::download(download_url, &dst_path, fname).await.map_err(|e| GpapiError::from(e))
         } else {
-            let fname = format!("{}.apk", pkg_name);
-            if let Some(download_url) = download_info.0 {
-                tokio_dl_stream_to_disk::download(download_url, &dst_path, fname).await.map_err(|e| GpapiError::from(e))
-            } else {
-                Err("Could not download app - no download URL available".into())
-            }
+            Err("Could not download app - no download URL available".into())
         }
     }
 
