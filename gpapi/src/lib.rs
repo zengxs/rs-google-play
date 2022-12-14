@@ -795,11 +795,16 @@ fn encrypt_login(login: &str, password: &str) -> Result<Vec<u8>, GpapiError> {
     Ok(res)
 }
 
+const URL_SAFE_ENGINE: base64::engine::fast_portable::FastPortable =
+    base64::engine::fast_portable::FastPortable::from(
+        &base64::alphabet::URL_SAFE,
+        base64::engine::fast_portable::NO_PAD);
+
 ///
 /// Base64 encode w/ URL safe characters.
 ///
 fn base64_urlsafe(input: &[u8]) -> String {
-    base64::encode_config(input, base64::URL_SAFE_NO_PAD)
+    base64::encode_engine(input, &URL_SAFE_ENGINE)
 }
 
 ///
