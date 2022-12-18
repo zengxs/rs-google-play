@@ -23,16 +23,16 @@ async fn main() {
 }
 ```
 
-From here, you can get package details, get the URL to download a package, or use the library to download it.
+From here, you can get package details, get the info to download a package, or use the library to download it.
 
 ```rust
 let details = gpa.details("com.instagram.android").await;
 println!("{:?}", details);
 
-let download_url = gpa.get_download_url("com.instagram.android", None).await;
-println!("{:?}", download_url);
+let download_info = gpa.get_download_info("com.instagram.android", None).await;
+println!("{:?}", download_info);
 
-gpa.download("com.instagram.android", None, &Path::new("/tmp/testing")).await;
+gpa.download("com.instagram.android", None, true, true, &Path::new("/tmp/testing"), None).await;
 ```
 
 ## Docs

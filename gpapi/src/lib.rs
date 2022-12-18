@@ -30,7 +30,7 @@
 //! let download_info = gpa.get_download_info("com.instagram.android", None).await;
 //! println!("{:?}", download_info);
 //!
-//! gpa.download("com.instagram.android", None, true, true, &Path::new("/tmp/testing")).await;
+//! gpa.download("com.instagram.android", None, true, true, &Path::new("/tmp/testing"), None).await;
 //! # }
 //! ```
 
@@ -45,6 +45,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
+use futures::future::TryFutureExt;
 use hyper::client::HttpConnector;
 use hyper::header::{HeaderName as HyperHeaderName, HeaderValue as HyperHeaderValue};
 use hyper::{Body, Client, Method, Request};
@@ -53,6 +54,7 @@ use openssl::ssl::{SslConnector, SslMethod};
 use prost::Message;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Url;
+use tokio_dl_stream_to_disk::AsyncDownload;
 
 use crate::error::{Error as GpapiError, ErrorKind as GpapiErrorKind};
 
@@ -268,6 +270,9 @@ impl Gpapi {
     /// * `include_additional_files` - A boolean indicating if additional files should be
     /// downloaded as well, if available
     /// * `dst_path` - A path to download the file to.
+    /// * `cb` - An optional callback for reporting information about the download asynchronously.  The outer
+    /// callback takes the filename (String) and total size in bytes of the file (u64) and returns an inner
+    /// callback.  The inner callback takes the position of the current download.
     ///
     /// # Errors
     ///
@@ -284,7 +289,8 @@ impl Gpapi {
         split_if_available: bool,
         include_additional_files: bool,
         dst_path: &Path,
-    ) -> Result<(), GpapiError> {
+        cb: Option<&Box<dyn Fn(String, u64) -> Box<dyn Fn(u64) -> ()>>>,
+    ) -> Result<Vec<()>, GpapiError> {
         let pkg_name = pkg_name.into();
         let download_info = self
             .get_download_info(pkg_name.clone(), version_code)
@@ -305,10 +311,18 @@ impl Gpapi {
             return Err(GpapiError::new(GpapiErrorKind::DirectoryMissing));
         }
 
+        let mut downloads = Vec::new();
+        let err = |e| GpapiError::from(e);
         if include_additional_files && download_info.2.len() > 0 {
             for additional_file in download_info.2 {
                 if let (Some(filename), Some(download_url)) = additional_file {
-                    tokio_dl_stream_to_disk::download(download_url, &dst_path, filename).await.map_err(|e| GpapiError::from(e))?;
+                    let dl = AsyncDownload::new(&download_url, &dst_path, &filename).get().await?;
+                    let length = dl.length();
+                    let cb = match length {
+                        Some(length) => cb.map(|c| c(filename.clone(), length)),
+                        None => None,
+                    };
+                    downloads.push((dl, cb));
                 }
             }
         }
@@ -316,18 +330,31 @@ impl Gpapi {
         if split_if_available && download_info.1.len() > 0 {
             for split in download_info.1 {
                 if let (Some(download_name), Some(download_url)) = split {
-                    let fname = format!("{}.{}.apk", pkg_name, download_name);
-                    tokio_dl_stream_to_disk::download(download_url, &dst_path, fname).await.map_err(|e| GpapiError::from(e))?;
+                    let filename = format!("{}.{}.apk", pkg_name, download_name);
+                    let dl = AsyncDownload::new(&download_url, &dst_path, &filename).get().await?;
+                    let length = dl.length();
+                    let cb = match length {
+                        Some(length) => cb.map(|c| c(filename.clone(), length)),
+                        None => None,
+                    };
+                    downloads.push((dl, cb));
                 }
             }
         }
 
-        let fname = format!("{}.apk", pkg_name);
+        let filename = format!("{}.apk", pkg_name);
         if let Some(download_url) = download_info.0 {
-            tokio_dl_stream_to_disk::download(download_url, &dst_path, fname).await.map_err(|e| GpapiError::from(e))
+            let dl = AsyncDownload::new(&download_url, &dst_path, &filename).get().await?;
+            let length = dl.length();
+            let cb = match length {
+                Some(length) => cb.map(|c| c(filename.clone(), length)),
+                None => None,
+            };
+            downloads.push((dl, cb));
         } else {
-            Err("Could not download app - no download URL available".into())
+            return Err("Could not download app - no download URL available".into())
         }
+        futures::future::try_join_all(downloads.iter_mut().map(|(d, c)| d.download(c).map_err(err))).await
     }
 
     /// Retrieve the download URL(s) and names for a package, given a package ID and optional
