@@ -44,6 +44,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use base64::{Engine as _, engine::general_purpose as b64_general_purpose};
 use bytes::Bytes;
 use futures::future::TryFutureExt;
 use hyper::client::HttpConnector;
@@ -143,7 +144,7 @@ impl Gpapi {
     ) -> Result<(), GpapiError> {
         let username = username.into();
         let login = encrypt_login(&username, &password.into())?;
-        let encrypted_password = base64_urlsafe(&login);
+        let encrypted_password = b64_general_purpose::URL_SAFE_NO_PAD.encode(&login);
         let form = self.authenticate(&username, &encrypted_password).await?;
         if let Some(err) = form.get("error") {
             if err == "NeedsBrowser" {
@@ -800,7 +801,7 @@ fn parse_form_reply(data: &str) -> HashMap<String, String> {
 /// Produces something of the format:
 /// |00|4 bytes of sha1(publicKey)|rsaEncrypt(publicKeyPem, "login\x00password")|
 fn encrypt_login(login: &str, password: &str) -> Result<Vec<u8>, GpapiError> {
-    let raw = base64::decode(consts::GOOGLE_PUB_KEY_B64).unwrap();
+    let raw = b64_general_purpose::STANDARD.decode(consts::GOOGLE_PUB_KEY_B64).unwrap();
     let pubkey = extract_pubkey(&raw)?.ok_or("Could not extract public key")?;
     let rsa = build_openssl_rsa(&pubkey);
 
@@ -820,18 +821,6 @@ fn encrypt_login(login: &str, password: &str) -> Result<Vec<u8>, GpapiError> {
     res.extend(&sha1[0..4]);
     res.extend(&to);
     Ok(res)
-}
-
-const URL_SAFE_ENGINE: base64::engine::fast_portable::FastPortable =
-    base64::engine::fast_portable::FastPortable::from(
-        &base64::alphabet::URL_SAFE,
-        base64::engine::fast_portable::NO_PAD);
-
-///
-/// Base64 encode w/ URL safe characters.
-///
-fn base64_urlsafe(input: &[u8]) -> String {
-    base64::encode_engine(input, &URL_SAFE_ENGINE)
 }
 
 ///
@@ -1017,9 +1006,9 @@ mod tests {
     #[test]
     fn login() {
         let enc = encrypt_login("foo", "bar").unwrap();
-        assert!(base64::encode(&enc).starts_with("AFcb4K"));
-        assert_eq!(base64::encode(&enc).len(), 180);
-        assert!(!base64_urlsafe(&enc).contains("/"));
+        assert!(b64_general_purpose::STANDARD.encode(&enc).starts_with("AFcb4K"));
+        assert_eq!(b64_general_purpose::STANDARD.encode(&enc).len(), 180);
+        assert!(!b64_general_purpose::URL_SAFE_NO_PAD.encode(&enc).contains("/"));
     }
 
     #[test]
