@@ -10,7 +10,7 @@ homepage = "https://github.com/EFForg/rs-google-play/tree/master/gpapi"
 repository = "https://github.com/EFForg/rs-google-play/tree/master/gpapi"
 
 [dependencies]
-prost = "0.11"
+prost = "0.12"
 reqwest = { version = "0.11", features = ["stream"] }
 bytes = "1"
 openssl = "0.10"
@@ -18,8 +18,8 @@ base64 = "0.21"
 byteorder = "1"
 hex = "0.4"
 lazy_static = "1.4"
-hyper = { version = "0.14", features = ["full"] }
-hyper-openssl = "0.9"
+hyper = { version = "1", features = ["full"] }
+hyper-openssl = "0.10"
 googleplay-protobuf = "1"
 bincode = "1"
 futures-util = { version = "0.3", features = ["io"] }
@@ -29,7 +29,7 @@ indicatif = "0.17"
 
 [build-dependencies]
 googleplay-protobuf = "1"
-prost = "0.11"
+prost = "0.12"
 bincode = "1"
 configparser = "3"
 
