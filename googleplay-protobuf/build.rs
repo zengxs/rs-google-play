@@ -6,7 +6,7 @@ extern crate prost_build;
 
 fn main() {
     if !Path::new("src/googleplay.rs").exists() {
-        prost_build::compile_protos(&["protos/googleplay.proto"],
+        prost_build::compile_protos(&["protos/GooglePlay.proto"],
                                     &["protos/"]).unwrap();
 
         let out_dir = env::var("OUT_DIR").unwrap();
