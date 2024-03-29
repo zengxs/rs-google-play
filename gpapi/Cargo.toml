@@ -11,7 +11,7 @@ repository = "https://github.com/EFForg/rs-google-play/tree/master/gpapi"
 
 [dependencies]
 prost = "0.12"
-reqwest = { version = "0.12", features = ["stream"] }
+#reqwest = "0.12"
 bytes = "1"
 hyper = { version = "0.14", features = ["full"] }
 hyper-tls = "0.5"

@@ -71,8 +71,8 @@ use hyper::header::{HeaderName as HyperHeaderName, HeaderValue as HyperHeaderVal
 use hyper::{Body, Client, Method, Request};
 use hyper_tls::HttpsConnector;
 use prost::Message;
-use reqwest::header::{HeaderMap, HeaderValue, HeaderName};
-use reqwest::Url;
+//use reqwest::header::{HeaderMap, HeaderValue, HeaderName};
+//use reqwest::Url;
 use tokio_dl_stream_to_disk::AsyncDownload;
 
 use crate::error::{Error as GpapiError, ErrorKind as GpapiErrorKind};
@@ -114,7 +114,7 @@ pub struct Gpapi {
     tos_token: Option<String>,
     dfe_cookie: Option<String>,
     gsf_id: Option<i64>,
-    client: Box<reqwest::Client>,
+    //client: Box<reqwest::Client>,
     hyper_client: Box<hyper::Client<HttpsConnector<HttpConnector>>>,
 }
 
@@ -142,7 +142,7 @@ impl Gpapi {
             tos_token: None,
             dfe_cookie: None,
             gsf_id: None,
-            client: Box::new(reqwest::Client::new()),
+            //client: Box::new(reqwest::Client::new()),
             hyper_client: Box::new(hyper_client),
         }
     }
@@ -874,55 +874,55 @@ impl Gpapi {
         Ok(body_bytes)
     }
 
-    async fn execute_request_helper_reqwest(
-        &self,
-        endpoint: &str,
-        query: Option<HashMap<&str, String>>,
-        msg: Option<&[u8]>,
-        headers: HashMap<&str, String>,
-        fdfe: bool,
-    ) -> Result<Bytes, Box<dyn Error>> {
-        let mut url = if fdfe {
-            Url::parse(&format!(
-                "{}/fdfe/{}",
-                consts::defaults::DEFAULT_BASE_URL,
-                endpoint
-            ))?
-        } else {
-            Url::parse(&format!(
-                "{}/{}",
-                consts::defaults::DEFAULT_BASE_URL,
-                endpoint
-            ))?
-        };
+    //async fn execute_request_helper_reqwest(
+    //    &self,
+    //    endpoint: &str,
+    //    query: Option<HashMap<&str, String>>,
+    //    msg: Option<&[u8]>,
+    //    headers: HashMap<&str, String>,
+    //    fdfe: bool,
+    //) -> Result<Bytes, Box<dyn Error>> {
+    //    let mut url = if fdfe {
+    //        Url::parse(&format!(
+    //            "{}/fdfe/{}",
+    //            consts::defaults::DEFAULT_BASE_URL,
+    //            endpoint
+    //        ))?
+    //    } else {
+    //        Url::parse(&format!(
+    //            "{}/{}",
+    //            consts::defaults::DEFAULT_BASE_URL,
+    //            endpoint
+    //        ))?
+    //    };
 
-        if let Some(query) = query {
-            let mut queries = url.query_pairs_mut();
-            for (key, val) in query {
-                queries.append_pair(key, &val);
-            }
-        }
+    //    if let Some(query) = query {
+    //        let mut queries = url.query_pairs_mut();
+    //        for (key, val) in query {
+    //            queries.append_pair(key, &val);
+    //        }
+    //    }
 
-        let mut reqwest_headers = HeaderMap::new();
-        for (key, val) in headers {
-            reqwest_headers.insert(HeaderName::from_bytes(key.as_bytes())?, HeaderValue::from_str(&val)?);
-        }
+    //    let mut reqwest_headers = HeaderMap::new();
+    //    for (key, val) in headers {
+    //        reqwest_headers.insert(HeaderName::from_bytes(key.as_bytes())?, HeaderValue::from_str(&val)?);
+    //    }
 
-        let res = {
-            if let Some(msg) = msg {
-                (*self.client)
-                    .post(url)
-                    .headers(reqwest_headers)
-                    .body(msg.to_owned())
-                    .send()
-                    .await?
-            } else {
-                (*self.client).get(url).headers(reqwest_headers).send().await?
-            }
-        };
+    //    let res = {
+    //        if let Some(msg) = msg {
+    //            (*self.client)
+    //                .post(url)
+    //                .headers(reqwest_headers)
+    //                .body(msg.to_owned())
+    //                .send()
+    //                .await?
+    //        } else {
+    //            (*self.client).get(url).headers(reqwest_headers).send().await?
+    //        }
+    //    };
 
-        Ok(res.bytes().await?)
-    }
+    //    Ok(res.bytes().await?)
+    //}
 
 }
 
