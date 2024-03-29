@@ -1108,6 +1108,7 @@ mod tests {
             if let (Ok(email), Ok(oauth_token)) = (env::var("EMAIL"), env::var("OAUTH_TOKEN")) {
                 let mut api = Gpapi::new("ad_g3_pro", &email);
                 assert!(api.request_aas_token(oauth_token).await.is_ok());
+                assert!(api.aas_token.is_some());
             }
         }
 
