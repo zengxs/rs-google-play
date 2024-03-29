@@ -181,7 +181,7 @@ impl Gpapi {
         auth_req: &AuthRequest,
     ) -> Result<HashMap<String, String>, Box<dyn Error>> {
         let form_body = form_post(&auth_req.params);
-        
+
         let mut headers = HashMap::new();
         headers.insert(
             "user-agent",
@@ -208,7 +208,7 @@ impl Gpapi {
     /// `set_aas_token`.
     pub fn get_aas_token(&self) -> Option<&str> {
         self.aas_token.as_ref().map(|token| token.as_str())
-    } 
+    }
 
     /// Log in to Google's Play Store API.  This is required for most other actions. The aas token
     /// has to be set via `request_aas_token` or `set_aas_token` first.
@@ -686,14 +686,14 @@ impl Gpapi {
         }
 
         let build = self.device_properties.android_checkin.clone().build.unwrap();
-        params.insert("sdk_version", build.sdk_version.as_ref().unwrap().to_string()); 
-        params.insert("Email", self.email.clone()); 
-        params.insert("google_play_services_version", build.google_services.as_ref().unwrap().to_string()); 
+        params.insert("sdk_version", build.sdk_version.as_ref().unwrap().to_string());
+        params.insert("Email", self.email.clone());
+        params.insert("google_play_services_version", build.google_services.as_ref().unwrap().to_string());
         params.insert("device_country", String::from(consts::defaults::DEFAULT_COUNTRY_CODE).to_ascii_lowercase());
         params.insert("lang", String::from(consts::defaults::DEFAULT_LANGUAGE).to_ascii_lowercase());
         params.insert("callerSig", String::from(consts::defaults::DEFAULT_CALLER_SIG));
     }
-    
+
     fn append_auth_params(
         &self,
         params: &mut HashMap<&str, String>
@@ -833,7 +833,7 @@ impl Gpapi {
         fdfe: bool,
     ) -> Result<Bytes, Box<dyn Error>> {
         let query = if let Some(query) = query {
-            format!("?{}", query 
+            format!("?{}", query
                 .iter()
                 .map(|(k, v)| format!("{}={}", k, v))
                 .collect::<Vec<String>>()
@@ -920,7 +920,7 @@ impl Gpapi {
                 (*self.client).get(url).headers(reqwest_headers).send().await?
             }
         };
-        
+
         Ok(res.bytes().await?)
     }
 

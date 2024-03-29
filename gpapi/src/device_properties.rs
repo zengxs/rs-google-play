@@ -26,7 +26,7 @@ impl EncodedDeviceProperties {
             extra_info,
         }
     }
-    
+
     pub fn to_decoded(self) -> DeviceProperties {
         DeviceProperties {
             device_configuration: DeviceConfigurationProto::decode(
