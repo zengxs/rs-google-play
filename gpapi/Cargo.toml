@@ -1,7 +1,7 @@
 [package]
 name = "gpapi"
 version = "4.0.0"
-authors = ["David Weinstein <dweinst@insitusec.com>", "Bill Budington <bill@eff.org>"]
+authors = ["Bill Budington <bill@eff.org>"]
 build = "build.rs"
 license = "MIT"
 edition = "2021"
@@ -15,14 +15,14 @@ reqwest = { version = "0.12", features = ["stream"] }
 bytes = "1"
 hyper = { version = "0.14", features = ["full"] }
 hyper-tls = "0.5"
-googleplay-protobuf = { path= "../googleplay-protobuf" }
+googleplay-protobuf = "2"
 bincode = "1"
 futures = "0.3"
 tokio-dl-stream-to-disk = "1"
 serde = { version = "1", features = ["derive"] }
 
 [build-dependencies]
-googleplay-protobuf = { path= "../googleplay-protobuf" }
+googleplay-protobuf = "2"
 prost = "0.12"
 bincode = "1"
 configparser = "3"
