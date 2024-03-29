@@ -14,10 +14,12 @@ Documentation for this crate can be found on [docs.rs](https://docs.rs/gpapi/).
 
 ## Todo
 
-Some of the functionality of the python library is missing, such as browsing and searching for packages.
+This inludes some subset, but not all, of the Google Play API library. Some of the functionality  is missing, such as browsing and searching for packages.
 
 ## Credits
 
 This library was originally created by David Weinstein, and is currently maintained by Bill Budington.
+
+It follows some of the conventions set by Aurora's [gplayapi java library](https://gitlab.com/AuroraOSS/gplayapi/).  It was originally modeled after the [googleplay-api for python](https://github.com/NoMore200/googleplay-api.git) patterns.
 
 License: {{license}}

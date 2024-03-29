@@ -1,25 +1,34 @@
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Cursor, Write};
 use std::path::Path;
 
 use configparser::ini::Ini;
 use prost::Message;
 
-use googleplay_protobuf::{AndroidBuildProto, AndroidCheckinProto, DeviceConfigurationProto};
+use googleplay_protobuf::{AndroidBuildProto, AndroidCheckinProto, DeviceConfigurationProto, DeviceFeature};
+
+use serde::{Serialize, Deserialize};
+include!("src/device_properties.rs");
 
 fn main() {
-    if !Path::new("src/device_properties.bin").exists()
-        || !Path::new("src/android_checkins.bin").exists()
-    {
+    if !Path::new("src/device_properties.bin").exists() {
         let mut config = Ini::new();
         config
             .read(fs::read_to_string("device.properties").unwrap())
             .unwrap();
 
-        let mut device_configurations = HashMap::new();
-        let mut android_checkins = HashMap::new();
+        let mut device_properties_map = HashMap::new();
         for section in config.sections() {
+            println!("{:?}", section);
+            let mut extra_info = HashMap::new();
+            extra_info.insert("Build.ID".to_string(), config.get(&section, "Build.ID").unwrap_or_default());
+            extra_info.insert("Vending.versionString".to_string(), config.get(&section, "Vending.versionString").unwrap_or_default());
+            extra_info.insert("Vending.version".to_string(), config.get(&section, "Vending.version").unwrap_or_default());
+            extra_info.insert("Build.VERSION.RELEASE".to_string(), config.get(&section, "Build.VERSION.RELEASE").unwrap_or_default());
+            if let Some(sim_operator) = config.get(&section, "SimOperator") {
+                extra_info.insert("SimOperator".to_string(), sim_operator);
+            }
             let mut android_build = AndroidBuildProto::default();
             android_build.id = config.get(&section, "Build.FINGERPRINT");
             android_build.product = config.get(&section, "Build.HARDWARE");
@@ -51,7 +60,6 @@ fn main() {
             let mut android_checkin_encoded = Vec::new();
             android_checkin_encoded.reserve(android_checkin.encoded_len());
             android_checkin.encode(&mut android_checkin_encoded).unwrap();
-            android_checkins.insert(section.clone(), android_checkin_encoded);
 
             let mut device_configuration = DeviceConfigurationProto::default();
             device_configuration.touch_screen = config
@@ -96,12 +104,16 @@ fn main() {
                 .collect();
             device_configuration.native_platform = config
                 .get(&section, "Platforms")
-                .unwrap()
+                .unwrap_or_default()
                 .split(",")
                 .map(|s| String::from(s))
                 .collect();
             device_configuration.screen_width = config
                 .getint(&section, "Screen.Width")
+                .unwrap()
+                .map(|v| v as i32);
+            device_configuration.screen_height = config
+                .getint(&section, "Screen.Height")
                 .unwrap()
                 .map(|v| v as i32);
             device_configuration.system_supported_locale = config
@@ -116,19 +128,32 @@ fn main() {
                 .split(",")
                 .map(|s| String::from(s))
                 .collect();
-            let mut device_encoded = Vec::new();
-            device_encoded.reserve(device_configuration.encoded_len());
-            device_configuration.encode(&mut device_encoded).unwrap();
-            device_configurations.insert(section, device_encoded);
+            device_configuration.device_feature = config
+                .get(&section, "Features")
+                .unwrap()
+                .split(",")
+                .map(|s| {
+                    let feature_name = String::from(s);
+                    let mut device_feature = DeviceFeature::default();
+                    device_feature.name = Some(feature_name);
+                    device_feature.value = Some(0);
+                    device_feature
+                })
+                .collect();
+            let mut device_configuration_encoded = Vec::new();
+            device_configuration_encoded.reserve(device_configuration.encoded_len());
+            device_configuration.encode(&mut device_configuration_encoded).unwrap();
+            let device_properties_encoded = EncodedDeviceProperties::new(
+                device_configuration_encoded,
+                android_checkin_encoded,
+                extra_info,
+            );
+            device_properties_map.insert(section.replace("gplayapi_", "").replace(".properties", ""), device_properties_encoded);
         }
 
-        let checkins_encoded: Vec<u8> = bincode::serialize(&android_checkins).unwrap();
-        let devices_encoded: Vec<u8> = bincode::serialize(&device_configurations).unwrap();
+        let devices_encoded: Vec<u8> = bincode::serialize(&device_properties_map).unwrap();
 
         let mut file = File::create("src/device_properties.bin").unwrap();
         file.write_all(&devices_encoded).unwrap();
-
-        let mut file = File::create("src/android_checkins.bin").unwrap();
-        file.write_all(&checkins_encoded).unwrap();
     }
 }
