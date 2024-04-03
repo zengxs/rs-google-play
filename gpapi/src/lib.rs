@@ -535,7 +535,7 @@ impl Gpapi {
 
         let build_id = self.device_properties.extra_info.get("Build.ID").unwrap().clone();
         let mut headers = HashMap::new();
-        self.append_auth_headers(&mut headers, build_device, build_id)?;
+        self.append_auth_headers(&mut headers, build_device, build_id);
 
         let resp = self.execute_checkin_request(&bytes, headers).await?;
         self.device_checkin_consistency_token = resp.device_checkin_consistency_token;
@@ -660,7 +660,7 @@ impl Gpapi {
         headers: &mut HashMap<&str, String>,
         build_device: S,
         build_id: S,
-    ) -> Result<(), Box<dyn Error>> {
+    ) {
         headers.insert(
             "app",
             String::from(consts::defaults::DEFAULT_ANDROID_VENDING),
@@ -675,7 +675,6 @@ impl Gpapi {
                 format!("{:x}", gsf_id),
             );
         }
-        Ok(())
     }
 
     fn append_default_auth_params(
@@ -749,7 +748,7 @@ impl Gpapi {
             let mut headers = HashMap::new();
             let build_device = self.device_properties.android_checkin.clone().build.as_ref().unwrap().device.as_ref().unwrap().clone();
             let build_id = self.device_properties.extra_info.get("Build.ID").unwrap().clone();
-            self.append_auth_headers(&mut headers, build_device, build_id)?;
+            self.append_auth_headers(&mut headers, build_device, build_id);
             headers.insert(
                 "content-length",
                 String::from("0"),
