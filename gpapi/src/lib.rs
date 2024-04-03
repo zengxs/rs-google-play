@@ -15,7 +15,8 @@
 //! #[tokio::main]
 //! async fn main() {
 //!     let mut api = Gpapi::new("ad_g3_pro", &email);
-//!     println!("{:?}", api.request_aas_token(oauth_token).await);
+//!     api.request_aas_token(oauth_token).await.unwrap();
+//!     println!("{:?}", api.get_aas_token());
 //! }
 //! ```
 //!
@@ -29,7 +30,7 @@
 //! async fn main() {
 //!     let mut api = Gpapi::new("px_7a", &email);
 //!     api.set_aas_token(aas_token);
-//!     api.login().await;
+//!     api.login().await.unwrap();
 //!     // do something
 //! }
 //! ```
@@ -43,7 +44,7 @@
 //! # async fn main() {
 //! # let mut api = Gpapi::new("px_7a", &email);
 //! # api.set_aas_token(aas_token);
-//! # api.login().await;
+//! # api.login().await.unwrap();
 //! let details = api.details("com.instagram.android").await;
 //! println!("{:?}", details);
 //!
