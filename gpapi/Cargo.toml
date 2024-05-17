@@ -17,7 +17,7 @@ prost = "0.12"
 #reqwest = "0.12"
 bytes = "1"
 hyper = { version = "0.14", features = ["full"] }
-hyper-rustls = { version = "0.24", features = ["webpki-roots", "http2"] }
+hyper-rustls = { version = "0.24", features = ["webpki-roots"] }
 googleplay-protobuf = "2"
 bincode = "1"
 futures = "0.3"

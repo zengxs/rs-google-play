@@ -125,7 +125,7 @@ impl Gpapi {
     pub fn new<S: Into<String>>(device_codename: S, email: S) -> Self {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
-        let https = HttpsConnectorBuilder::new().with_webpki_roots().https_only().enable_all_versions().build();
+        let https = HttpsConnectorBuilder::new().with_webpki_roots().https_only().enable_http1().build();
 
         let hyper_client = Client::builder().build::<_, hyper::Body>(https);
 
