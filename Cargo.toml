@@ -2,4 +2,6 @@
 members = [
     "gpapi",
     "googleplay-protobuf",
+    "tokio-dl-stream-to-disk",
 ]
+resolver = "2"
