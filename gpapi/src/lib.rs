@@ -70,7 +70,7 @@ use futures::future::TryFutureExt;
 use hyper::client::HttpConnector;
 use hyper::header::{HeaderName as HyperHeaderName, HeaderValue as HyperHeaderValue};
 use hyper::{Body, Client, Method, Request};
-use hyper_tls::HttpsConnector;
+use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use prost::Message;
 //use reqwest::header::{HeaderMap, HeaderValue, HeaderName};
 //use reqwest::Url;
@@ -125,7 +125,8 @@ impl Gpapi {
     pub fn new<S: Into<String>>(device_codename: S, email: S) -> Self {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
-        let https = HttpsConnector::new_with_connector(http);
+        let https = HttpsConnectorBuilder::new().with_webpki_roots().https_only().enable_all_versions().build();
+
         let hyper_client = Client::builder().build::<_, hyper::Body>(https);
 
         Gpapi {
